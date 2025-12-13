@@ -21,7 +21,7 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun BayeraTravelCustomerApp() {
     Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-        Greeting("Bayera Customer")
+        Greeting("Welcome to Bayera Travel")
     }
 }
 
