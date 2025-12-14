@@ -32,9 +32,8 @@ android {
 dependencies {
     implementation(project(":packages:shared-types"))
     
-    // --- MAP LIBRARY (OpenStreetMap) ---
+    // --- MAP LIBRARY (FIXED: Only use the main library) ---
     implementation("org.osmdroid:osmdroid-android:6.1.16")
-    implementation("org.osmdroid:osmdroid-compose:0.0.5")
 
     implementation("androidx.core:core-ktx:1.12.0")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.6.2")
