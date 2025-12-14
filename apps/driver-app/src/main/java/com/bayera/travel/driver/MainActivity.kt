@@ -13,7 +13,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-// --- SHARED CODE REUSE ---
+// Importing Shared Logic
 import com.bayera.travel.common.models.User
 import com.bayera.travel.common.models.UserRole
 
@@ -21,7 +21,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // Create a Driver User using Shared Logic
+        // Using Shared Model for Driver
         val driverUser = User(
             id = "DRV-9988",
             phoneNumber = "+251911556677",
@@ -36,7 +36,7 @@ class MainActivity : ComponentActivity() {
             MaterialTheme {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
-                    color = Color(0xFFE8F5E9) // Light Green Background for Drivers
+                    color = Color(0xFFE8F5E9) // Light Green Background
                 ) {
                     Column(
                         modifier = Modifier.fillMaxSize(),
@@ -44,7 +44,7 @@ class MainActivity : ComponentActivity() {
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
                         Text(
-                            text = "🚖 Driver Dashboard",
+                            text = "🚖 Driver App",
                             style = MaterialTheme.typography.headlineMedium,
                             fontWeight = FontWeight.Bold,
                             color = Color(0xFF2E7D32) // Dark Green
@@ -59,7 +59,6 @@ class MainActivity : ComponentActivity() {
                         
                         Spacer(modifier = Modifier.height(32.dp))
 
-                        // Toggle Online Status
                         Button(
                             onClick = { 
                                 isOnline = !isOnline
@@ -72,15 +71,6 @@ class MainActivity : ComponentActivity() {
                             modifier = Modifier.width(220.dp).height(50.dp)
                         ) {
                             Text(if (isOnline) "🟢 GO OFFLINE" else "🔴 GO ONLINE")
-                        }
-                        
-                        Spacer(modifier = Modifier.height(16.dp))
-                        
-                        OutlinedButton(
-                            onClick = { },
-                            modifier = Modifier.width(220.dp)
-                        ) {
-                            Text("View Earnings")
                         }
                     }
                 }
