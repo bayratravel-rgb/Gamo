@@ -1,4 +1,4 @@
-name: Build Android APK
+name: Build Monorepo
 
 on:
   push:
@@ -21,19 +21,19 @@ jobs:
     - name: Grant execute permission for gradlew
       run: chmod +x gradlew
 
-    - name: Build with Gradle
+    - name: Build All Apps
       run: ./gradlew assembleDebug
 
-    # --- SEPARATE UPLOAD FOR CUSTOMER APP ---
+    # --- UPLOAD 1: CUSTOMER APP ---
     - name: Upload Customer App
       uses: actions/upload-artifact@v3
       with:
-        name: Customer-App-APK
+        name: CUSTOMER-APP-APK
         path: apps/customer-app/build/outputs/apk/debug/*.apk
 
-    # --- SEPARATE UPLOAD FOR DRIVER APP ---
+    # --- UPLOAD 2: DRIVER APP ---
     - name: Upload Driver App
       uses: actions/upload-artifact@v3
       with:
-        name: Driver-App-APK
+        name: DRIVER-APP-APK
         path: apps/driver-app/build/outputs/apk/debug/*.apk
