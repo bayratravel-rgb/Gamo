@@ -1,11 +1,11 @@
-name: Build Monorepo
+name: Monorepo Build System
 
 on:
   push:
     branches: [ "main" ]
 
 jobs:
-  build:
+  build_and_release:
     runs-on: ubuntu-latest
 
     steps:
@@ -21,19 +21,20 @@ jobs:
     - name: Grant execute permission for gradlew
       run: chmod +x gradlew
 
-    - name: Build All Apps
+    # Build both apps explicitly
+    - name: Build All APKs
       run: ./gradlew assembleDebug
 
-    # --- UPLOAD 1: CUSTOMER APP ---
+    # --- UPLOAD CUSTOMER APP ---
     - name: Upload Customer App
       uses: actions/upload-artifact@v3
       with:
-        name: CUSTOMER-APP-APK
+        name: CUSTOMER-APP
         path: apps/customer-app/build/outputs/apk/debug/*.apk
 
-    # --- UPLOAD 2: DRIVER APP ---
+    # --- UPLOAD DRIVER APP ---
     - name: Upload Driver App
       uses: actions/upload-artifact@v3
       with:
-        name: DRIVER-APP-APK
+        name: DRIVER-APP
         path: apps/driver-app/build/outputs/apk/debug/*.apk
