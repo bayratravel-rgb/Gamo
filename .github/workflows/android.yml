@@ -24,9 +24,16 @@ jobs:
     - name: Build with Gradle
       run: ./gradlew assembleDebug
 
-    - name: Upload APK
+    # --- SEPARATE UPLOAD FOR CUSTOMER APP ---
+    - name: Upload Customer App
       uses: actions/upload-artifact@v3
       with:
-        name: app-debug
-        # This wildcard path finds ANY apk generated in the project
-        path: "**/*.apk"
+        name: Customer-App-APK
+        path: apps/customer-app/build/outputs/apk/debug/*.apk
+
+    # --- SEPARATE UPLOAD FOR DRIVER APP ---
+    - name: Upload Driver App
+      uses: actions/upload-artifact@v3
+      with:
+        name: Driver-App-APK
+        path: apps/driver-app/build/outputs/apk/debug/*.apk
