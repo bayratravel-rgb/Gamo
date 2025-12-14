@@ -32,12 +32,15 @@ android {
         compose = true
     }
     composeOptions {
-        // This version MUST match Kotlin 1.9.0
         kotlinCompilerExtensionVersion = "1.5.1"
     }
 }
 
 dependencies {
+    // --- THIS IS THE KEY LINE: Connect to Shared Module ---
+    implementation(project(":packages:shared-types"))
+    
+    // Standard Android/Compose libraries
     implementation("androidx.core:core-ktx:1.12.0")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.6.2")
     implementation("androidx.activity:activity-compose:1.8.1")
