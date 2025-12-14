@@ -13,12 +13,23 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+// --- IMPORT FROM SHARED MODULE ---
+import com.bayera.travel.common.models.User
+import com.bayera.travel.common.models.UserRole
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        // Create a dummy user using the Shared Data Model
+        val currentUser = User(
+            id = "US-12345",
+            phoneNumber = "+251911223344",
+            name = "Abebe Bikila",
+            role = UserRole.CUSTOMER
+        )
+
         setContent {
-            // This grabs the current context so we can show popups
             val context = LocalContext.current
             
             MaterialTheme {
@@ -38,13 +49,20 @@ class MainActivity : ComponentActivity() {
                             color = Color(0xFF1E88E5)
                         )
                         
-                        Spacer(modifier = Modifier.height(32.dp))
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        // Display the name from the Shared Model
+                        Text(
+                            text = "Welcome, ${currentUser.name}!",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = Color.DarkGray
+                        )
                         
-                        // Primary Button with Click Action
+                        Spacer(modifier = Modifier.height(24.dp))
+                        
                         Button(
                             onClick = { 
-                                // This is the logic!
-                                Toast.makeText(context, "Searching for Flights... 🛫", Toast.LENGTH_SHORT).show()
+                                Toast.makeText(context, "Booking for ${currentUser.name}...", Toast.LENGTH_SHORT).show()
                             },
                             colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1E88E5)),
                             modifier = Modifier.width(200.dp)
@@ -54,10 +72,9 @@ class MainActivity : ComponentActivity() {
                         
                         Spacer(modifier = Modifier.height(16.dp))
                         
-                        // Secondary Button with Click Action
                         OutlinedButton(
                             onClick = { 
-                                Toast.makeText(context, "You have no tickets yet 🎟️", Toast.LENGTH_SHORT).show()
+                                Toast.makeText(context, "ID: ${currentUser.id}", Toast.LENGTH_SHORT).show()
                             },
                             modifier = Modifier.width(200.dp)
                         ) {
