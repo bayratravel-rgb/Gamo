@@ -1,33 +1,39 @@
-name: Build Android APK
+name: Day 3 Build
 
 on:
   push:
-    branches: [ "main", "master" ]
-  pull_request:
-    branches: [ "main", "master" ]
+    branches: [ "main" ]
 
 jobs:
-  build:
+  build_all:
     runs-on: ubuntu-latest
 
     steps:
-    - name: Checkout Code
-      uses: actions/checkout@v4
+    - uses: actions/checkout@v4
 
     - name: Set up JDK 17
       uses: actions/setup-java@v4
       with:
         java-version: '17'
         distribution: 'temurin'
+        cache: gradle
 
     - name: Grant execute permission for gradlew
       run: chmod +x gradlew
 
-    - name: Build with Gradle
+    - name: Build Debug APKs
       run: ./gradlew assembleDebug
 
-    - name: Upload APK
+    # --- UPLOAD CUSTOMER APP ---
+    - name: Upload Customer App
       uses: actions/upload-artifact@v4
       with:
-        name: bayera-travel-debug
-        path: apps/customer-app/build/outputs/apk/debug/
+        name: CUSTOMER-APP
+        path: apps/customer-app/build/outputs/apk/debug/*.apk
+
+    # --- UPLOAD DRIVER APP ---
+    - name: Upload Driver App
+      uses: actions/upload-artifact@v4
+      with:
+        name: DRIVER-APP
+        path: apps/driver-app/build/outputs/apk/debug/*.apk
