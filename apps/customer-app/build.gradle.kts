@@ -14,13 +14,6 @@ android {
         versionCode = 1
         versionName = "1.0"
     }
-
-    buildTypes {
-        release {
-            isMinifyEnabled = false
-            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
-        }
-    }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
@@ -37,10 +30,12 @@ android {
 }
 
 dependencies {
-    // --- THIS IS THE KEY LINE: Connect to Shared Module ---
     implementation(project(":packages:shared-types"))
     
-    // Standard Android/Compose libraries
+    // --- MAP LIBRARY (OpenStreetMap) ---
+    implementation("org.osmdroid:osmdroid-android:6.1.16")
+    implementation("org.osmdroid:osmdroid-compose:0.0.5")
+
     implementation("androidx.core:core-ktx:1.12.0")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.6.2")
     implementation("androidx.activity:activity-compose:1.8.1")
