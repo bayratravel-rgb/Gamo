@@ -20,13 +20,13 @@ import androidx.compose.ui.viewinterop.AndroidView
 import org.osmdroid.tileprovider.tilesource.TileSourceFactory
 import org.osmdroid.util.GeoPoint
 import org.osmdroid.views.MapView
+import org.osmdroid.views.overlay.Marker
 import org.osmdroid.config.Configuration
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         
-        // Initialize Map Config
         Configuration.getInstance().userAgentValue = packageName
 
         setContent {
@@ -34,15 +34,24 @@ class MainActivity : ComponentActivity() {
             
             Box(modifier = Modifier.fillMaxSize()) {
                 
-                // 1. THE MAP (Arba Minch)
+                // 1. THE MAP
                 AndroidView(
                     factory = { ctx ->
                         MapView(ctx).apply {
                             setTileSource(TileSourceFactory.MAPNIK)
                             setMultiTouchControls(true)
-                            // Set location to Arba Minch, Ethiopia
-                            controller.setZoom(14.0)
-                            controller.setCenter(GeoPoint(6.0206, 37.5557)) 
+                            controller.setZoom(15.0)
+                            
+                            // Center on Arba Minch
+                            val startPoint = GeoPoint(6.0206, 37.5557)
+                            controller.setCenter(startPoint)
+                            
+                            // ADD MARKER (The Pin)
+                            val startMarker = Marker(this)
+                            startMarker.position = startPoint
+                            startMarker.setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
+                            startMarker.title = "Pickup Here"
+                            overlays.add(startMarker)
                         }
                     },
                     modifier = Modifier.fillMaxSize()
@@ -68,12 +77,12 @@ class MainActivity : ComponentActivity() {
                     
                     Button(
                         onClick = { 
-                            Toast.makeText(context, "Finding drivers in Arba Minch...", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(context, "Requesting Driver...", Toast.LENGTH_SHORT).show()
                         },
                         colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1E88E5)),
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Text("Request Ride")
+                        Text("Confirm Pickup")
                     }
                 }
             }
