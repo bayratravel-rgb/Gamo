@@ -1,0 +1,47 @@
+
+  "project_info": {
+    "project_number": "643765664968",
+    "project_id": "bayera-travel",
+    "storage_bucket": "bayera-travel.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:643765664968:android:801ade1a7ec854095af9fd",
+        "android_client_info": {
+          "package_name": "com.bayera.travel.customer"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCuzSPe6f4JoQYuYS-JskaHT11jKNEuA20"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:643765664968:android:656f004fce2ecda85af9fd",
+        "android_client_info": {
+          "package_name": "com.bayera.travel.driver"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCuzSPe6f4JoQYuYS-JskaHT11jKNEuA20"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "
