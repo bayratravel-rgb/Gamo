@@ -1,6 +1,7 @@
 {
   "project_info": {
     "project_number": "643765664968",
+    "firebase_url": "https://bayera-travel-default-rtdb.europe-west1.firebasedatabase.app",
     "project_id": "bayera-travel",
     "storage_bucket": "bayera-travel.firebasestorage.app"
   },
