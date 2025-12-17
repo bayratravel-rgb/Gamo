@@ -27,10 +27,11 @@ android {
 dependencies {
     implementation(project(":packages:shared-types"))
     
-    // --- ADDED: Google Location Services ---
-    implementation("com.google.android.gms:play-services-location:21.0.1")
+    // --- ADDED: Navigation Library (Crucial Fix) ---
+    implementation("androidx.navigation:navigation-compose:2.7.6")
 
-    // Map
+    // Google Location & Maps
+    implementation("com.google.android.gms:play-services-location:21.0.1")
     implementation("org.osmdroid:osmdroid-android:6.1.16")
 
     // Firebase
