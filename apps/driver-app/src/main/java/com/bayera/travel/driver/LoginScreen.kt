@@ -14,6 +14,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+// FIXED: Correct Navigation Import
 import androidx.navigation.NavController
 
 @Composable
@@ -29,7 +30,7 @@ fun LoginScreen(navController: NavController) {
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color(0xFFE8F5E9)) // Light Green
+            .background(Color(0xFFE8F5E9))
             .padding(24.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
@@ -56,7 +57,7 @@ fun LoginScreen(navController: NavController) {
 
         OutlinedTextField(
             value = carModel, onValueChange = { carModel = it },
-            label = { Text("Car Model (e.g. Toyota Vitz)") },
+            label = { Text("Car Model (e.g. Bajaj)") },
             modifier = Modifier.fillMaxWidth(),
             colors = TextFieldDefaults.colors(focusedContainerColor = Color.White, unfocusedContainerColor = Color.White)
         )
@@ -64,7 +65,7 @@ fun LoginScreen(navController: NavController) {
 
         OutlinedTextField(
             value = licensePlate, onValueChange = { licensePlate = it },
-            label = { Text("License Plate (e.g. A-1234)") },
+            label = { Text("License Plate") },
             modifier = Modifier.fillMaxWidth(),
             colors = TextFieldDefaults.colors(focusedContainerColor = Color.White, unfocusedContainerColor = Color.White)
         )
@@ -73,8 +74,7 @@ fun LoginScreen(navController: NavController) {
 
         Button(
             onClick = {
-                if (name.isNotEmpty() && carModel.isNotEmpty()) {
-                    // Save to Local Storage
+                if (name.isNotEmpty()) {
                     prefs.edit()
                         .putString("name", name)
                         .putString("phone", phone)
