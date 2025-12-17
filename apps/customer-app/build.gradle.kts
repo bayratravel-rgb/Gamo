@@ -27,12 +27,15 @@ android {
 dependencies {
     implementation(project(":packages:shared-types"))
     
-    // --- FIREBASE (Explicitly added here) ---
+    // --- ADDED: Navigation Library ---
+    implementation("androidx.navigation:navigation-compose:2.7.6")
+
+    // Firebase
     implementation(platform("com.google.firebase:firebase-bom:32.7.0"))
     implementation("com.google.firebase:firebase-database-ktx")
     implementation("com.google.firebase:firebase-common-ktx")
 
-    // Map & UI
+    // UI & Map
     implementation("org.osmdroid:osmdroid-android:6.1.16")
     implementation("androidx.core:core-ktx:1.12.0")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.6.2")
