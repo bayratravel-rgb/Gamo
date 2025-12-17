@@ -31,7 +31,6 @@ class MainActivity : ComponentActivity() {
         setContent {
             val context = LocalContext.current
             var activeTrips by remember { mutableStateOf<List<Trip>>(emptyList()) }
-            val myDriverId = "DRV-KEBEDE-001"
 
             LaunchedEffect(Unit) {
                 val database = FirebaseDatabase.getInstance()
@@ -43,13 +42,10 @@ class MainActivity : ComponentActivity() {
                         for (child in snapshot.children) {
                             try {
                                 val trip = child.getValue(Trip::class.java)
-                                // Only show REQUESTED trips
                                 if (trip != null && trip.status == TripStatus.REQUESTED) {
                                     trips.add(trip)
                                 }
-                            } catch (e: Exception) {
-                                // Ignore bad data
-                            }
+                            } catch (e: Exception) {}
                         }
                         activeTrips = trips
                     }
@@ -59,11 +55,8 @@ class MainActivity : ComponentActivity() {
 
             MaterialTheme {
                 Surface(modifier = Modifier.fillMaxSize(), color = Color(0xFFE8F5E9)) {
-                    Column(
-                        modifier = Modifier.fillMaxSize().padding(16.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Text("🚖 Driver Dashboard", style = MaterialTheme.typography.headlineMedium, color = Color(0xFF2E7D32), fontWeight = FontWeight.Bold)
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Text("🚖 Incoming Requests", style = MaterialTheme.typography.headlineMedium, color = Color(0xFF2E7D32), fontWeight = FontWeight.Bold)
                         Spacer(modifier = Modifier.height(16.dp))
 
                         if (activeTrips.isEmpty()) {
@@ -71,7 +64,7 @@ class MainActivity : ComponentActivity() {
                         } else {
                             LazyColumn {
                                 items(activeTrips) { trip ->
-                                    TripCard(trip, myDriverId)
+                                    TripCard(trip)
                                 }
                             }
                         }
@@ -83,7 +76,7 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-fun TripCard(trip: Trip, driverId: String) {
+fun TripCard(trip: Trip) {
     val context = LocalContext.current
     
     Card(
@@ -92,34 +85,28 @@ fun TripCard(trip: Trip, driverId: String) {
         elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
-            Text("📍 Pickup: ${trip.pickupLocation.address}", fontWeight = FontWeight.Bold)
-            Text("💰 Fare: ${trip.price} ETB", color = Color(0xFF2E7D32), fontWeight = FontWeight.Bold)
+            // --- UPDATED: Show Customer Name ---
+            Text("👤 Customer: ${trip.customerId}", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            Spacer(modifier = Modifier.height(8.dp))
+            
+            Text("📍 Pickup: ${trip.pickupLocation.address}")
+            Text("🏁 Dropoff: ${trip.dropoffLocation.address}")
+            
+            Spacer(modifier = Modifier.height(8.dp))
+            
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("💰 ${trip.price} ETB", color = Color(0xFF2E7D32), fontWeight = FontWeight.Bold)
+                Spacer(modifier = Modifier.width(16.dp))
+                Text("⏱️ ${trip.estimatedTime} min")
+            }
             
             Spacer(modifier = Modifier.height(12.dp))
             
             Button(
                 onClick = { 
-                    // 1. Show Toast immediately to prove button works
-                    Toast.makeText(context, "Accepting Ride...", Toast.LENGTH_SHORT).show()
-
-                    // 2. Database Update Logic
-                    val database = FirebaseDatabase.getInstance()
-                    val tripRef = database.getReference("trips").child(trip.tripId)
-                    
-                    // We update the fields manually to be 100% safe
-                    val updates = hashMapOf<String, Any>(
-                        "status" to "ACCEPTED",
-                        "driverId" to driverId
-                    )
-                    
-                    tripRef.updateChildren(updates)
-                        .addOnSuccessListener {
-                            Toast.makeText(context, "✅ Success! Client Notified.", Toast.LENGTH_LONG).show()
-                        }
-                        .addOnFailureListener { e ->
-                            // If this shows, we have a permission/internet issue
-                            Toast.makeText(context, "❌ Error: ${e.message}", Toast.LENGTH_LONG).show()
-                        }
+                    val db = FirebaseDatabase.getInstance().getReference("trips").child(trip.tripId)
+                    db.updateChildren(mapOf("status" to "ACCEPTED", "driverId" to "Kebede"))
+                    Toast.makeText(context, "Accepted ${trip.customerId}'s ride!", Toast.LENGTH_SHORT).show()
                 },
                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2E7D32)),
                 modifier = Modifier.fillMaxWidth()
