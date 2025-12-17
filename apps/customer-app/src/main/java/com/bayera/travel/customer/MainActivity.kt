@@ -1,5 +1,6 @@
 package com.bayera.travel.customer
 
+import android.content.Context
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
@@ -19,13 +20,11 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
-// Map
 import org.osmdroid.tileprovider.tilesource.TileSourceFactory
 import org.osmdroid.util.GeoPoint
 import org.osmdroid.views.MapView
 import org.osmdroid.views.overlay.Marker
 import org.osmdroid.config.Configuration
-// Firebase
 import com.google.firebase.FirebaseApp
 import com.google.firebase.database.DataSnapshot
 import com.google.firebase.database.DatabaseError
@@ -44,28 +43,27 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             val navController = rememberNavController()
+            val context = LocalContext.current
+            val prefs = context.getSharedPreferences("user_prefs", Context.MODE_PRIVATE)
+            
+            // Auto-login check: If name exists, go straight to Home
+            val startScreen = if (prefs.getString("name", "").isNullOrEmpty()) "login" else "home"
 
-            // --- NAVIGATION CONTROLLER ---
-            NavHost(navController = navController, startDestination = "login") {
-                
-                // SCREEN 1: LOGIN
-                composable("login") {
-                    LoginScreen(navController)
-                }
-
-                // SCREEN 2: MAP (HOME)
-                composable("home") {
-                    HomeScreen()
-                }
+            NavHost(navController = navController, startDestination = startScreen) {
+                composable("login") { LoginScreen(navController) }
+                composable("home") { HomeScreen() }
             }
         }
     }
 }
 
-// Moved the Map Logic to a separate function to keep things clean
 @Composable
 fun HomeScreen() {
     val context = LocalContext.current
+    // Retrieve Saved User Name
+    val prefs = context.getSharedPreferences("user_prefs", Context.MODE_PRIVATE)
+    val userName = prefs.getString("name", "Unknown User") ?: "Unknown User"
+    
     var currentTrip by remember { mutableStateOf<Trip?>(null) }
 
     LaunchedEffect(currentTrip?.tripId) {
@@ -106,13 +104,16 @@ fun HomeScreen() {
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             if (currentTrip == null) {
+                Text("Hi, $userName 👋", style = MaterialTheme.typography.titleMedium, color = Color.Gray)
                 Text("Arba Minch Rides", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
                 Spacer(modifier = Modifier.height(16.dp))
                 Button(
                     onClick = { 
                         val newId = UUID.randomUUID().toString()
                         val newTrip = Trip(
-                            tripId = newId, customerId = "USER-LOGGED-IN",
+                            tripId = newId, 
+                            // SEND REAL NAME TO DRIVER
+                            customerId = "$userName (Ph: ${prefs.getString("phone", "")})",
                             pickupLocation = Location(6.0206, 37.5557, "Arba Minch Airport"),
                             dropoffLocation = Location(6.03, 37.56, "University"),
                             price = 150.0, estimatedTime = 15, status = TripStatus.REQUESTED
@@ -126,11 +127,11 @@ fun HomeScreen() {
             } else if (currentTrip!!.status == TripStatus.REQUESTED) {
                 CircularProgressIndicator(color = Color(0xFF1E88E5))
                 Spacer(modifier = Modifier.height(8.dp))
-                Text("Finding you a driver...", style = MaterialTheme.typography.bodyLarge)
+                Text("Finding a driver for $userName...", style = MaterialTheme.typography.bodyLarge)
             } else if (currentTrip!!.status == TripStatus.ACCEPTED) {
                 Text("✅ Driver Found!", style = MaterialTheme.typography.headlineSmall, color = Color(0xFF2E7D32), fontWeight = FontWeight.Bold)
                 Spacer(modifier = Modifier.height(8.dp))
-                Text("Driver ID: ${currentTrip!!.driverId}", style = MaterialTheme.typography.bodyMedium)
+                Text("Driver: ${currentTrip!!.driverId}", style = MaterialTheme.typography.bodyLarge)
                 Text("Arriving in ${currentTrip!!.estimatedTime} mins", style = MaterialTheme.typography.bodyMedium)
             }
         }
