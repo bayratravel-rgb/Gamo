@@ -15,8 +15,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Menu
-import androidx.compose.material.icons.filled.MyLocation // FIXED: Added Import
+import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material.icons.filled.Place
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -63,24 +64,23 @@ fun AppUI() {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     
-    // Default: Ethiopia Center
-    val ethiopiaCenter = GeoPoint(9.145, 40.489)
+    // Default: Arba Minch
+    val startGeo = GeoPoint(6.0206, 37.5557)
     
-    var addressText by remember { mutableStateOf("Locating you...") }
-    var currentGeoPoint by remember { mutableStateOf(ethiopiaCenter) }
+    var addressText by remember { mutableStateOf("አካባቢውን በመፈለግ ላይ...") } // "Locating..."
+    var currentGeoPoint by remember { mutableStateOf(startGeo) }
     var isMapMoving by remember { mutableStateOf(false) }
     var mapController: org.osmdroid.api.IMapController? by remember { mutableStateOf(null) }
 
     val fusedLocationClient = remember { LocationServices.getFusedLocationProviderClient(context) }
 
-    // --- AUTO-LOCATE LOGIC ---
     fun zoomToUser() {
         try {
-            fusedLocationClient.lastLocation.addOnSuccessListener { loc -> // Renamed variable to 'loc'
+            fusedLocationClient.lastLocation.addOnSuccessListener { loc ->
                 if (loc != null) {
                     val userPos = GeoPoint(loc.latitude, loc.longitude)
                     mapController?.animateTo(userPos)
-                    mapController?.setZoom(18.0)
+                    mapController?.setZoom(18.5)
                     currentGeoPoint = userPos
                 }
             }
@@ -95,7 +95,6 @@ fun AppUI() {
         }
     }
 
-    // Trigger on Start
     LaunchedEffect(Unit) {
         if (ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) 
             == PackageManager.PERMISSION_GRANTED) {
@@ -110,10 +109,11 @@ fun AppUI() {
         AndroidView(
             factory = { ctx ->
                 MapView(ctx).apply {
-                    setTileSource(TileSourceFactory.MAPNIK)
+                    setTileSource(TileSourceFactory.MAPNIK) // Using Standard Map
                     setMultiTouchControls(true)
-                    controller.setZoom(6.0)
-                    controller.setCenter(ethiopiaCenter)
+                    isTilesScaledToDpi = true 
+                    controller.setZoom(15.0)
+                    controller.setCenter(startGeo)
                     mapController = controller
 
                     addMapListener(object : MapListener {
@@ -146,32 +146,59 @@ fun AppUI() {
                         val addresses = geocoder.getFromLocation(currentGeoPoint.latitude, currentGeoPoint.longitude, 1)
                         if (!addresses.isNullOrEmpty()) {
                             val line = addresses[0].getAddressLine(0)
-                            val shortAddr = line.split(",").take(3).joinToString(",")
+                            val shortAddr = line.split(",").take(2).joinToString(",")
                             withContext(Dispatchers.Main) { addressText = shortAddr }
                         }
                     } catch (e: Exception) {
-                        withContext(Dispatchers.Main) { addressText = "Unknown Location" }
+                        withContext(Dispatchers.Main) { addressText = "የማይታወቅ ቦታ" } // Unknown Loc
                     }
                 }
             }
         }
 
+        // Pin
         Icon(
             imageVector = Icons.Default.LocationOn,
             contentDescription = "Pin",
-            modifier = Modifier.size(50.dp).align(Alignment.Center).offset(y = (-25).dp),
+            modifier = Modifier.size(48.dp).align(Alignment.Center).offset(y = (-24).dp),
             tint = Color(0xFFD32F2F)
         )
 
+        // AMHARIC SEARCH BAR
+        Card(
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .padding(top = 50.dp, start = 16.dp, end = 16.dp)
+                .fillMaxWidth(),
+            shape = RoundedCornerShape(8.dp),
+            colors = CardDefaults.cardColors(containerColor = Color.White),
+            elevation = CardDefaults.cardElevation(defaultElevation = 6.dp)
+        ) {
+            Row(
+                modifier = Modifier.padding(16.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(Icons.Default.Menu, contentDescription = "Menu", tint = Color.Gray)
+                Spacer(modifier = Modifier.width(16.dp))
+                Column {
+                    Text("ወዴት ነው?", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold) // Where to?
+                    Text("መዳረሻዎን ያስገቡ", style = MaterialTheme.typography.bodySmall, color = Color.Gray) // Enter dest
+                }
+                Spacer(modifier = Modifier.weight(1f))
+                Icon(Icons.Default.Search, contentDescription = "Search", tint = Color(0xFF1E88E5))
+            }
+        }
+
+        // GPS Button
         FloatingActionButton(
             onClick = { zoomToUser() },
-            modifier = Modifier.align(Alignment.TopEnd).padding(top = 40.dp, end = 16.dp),
+            modifier = Modifier.align(Alignment.CenterEnd).padding(end = 16.dp).offset(y = 50.dp),
             containerColor = Color.White
         ) {
-            // FIXED: Using 'MyLocation' which is now imported
             Icon(Icons.Default.MyLocation, contentDescription = "My Location", tint = Color(0xFF1E88E5))
         }
 
+        // AMHARIC BOTTOM SHEET
         Column(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
@@ -179,34 +206,36 @@ fun AppUI() {
                 .background(Color.White, shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp))
                 .padding(24.dp)
         ) {
-            Text("Confirm Pickup Point", style = MaterialTheme.typography.titleMedium, color = Color.Gray)
-            Spacer(modifier = Modifier.height(16.dp))
+            Text("የመነሻ ቦታን ያረጋግጡ", style = MaterialTheme.typography.bodyMedium, color = Color.Gray) // Confirm Pickup
+            Spacer(modifier = Modifier.height(8.dp))
+            
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Default.Place, contentDescription = null, tint = Color(0xFF1E88E5))
                 Spacer(modifier = Modifier.width(12.dp))
-                Text(text = addressText, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, maxLines = 2)
+                Text(text = addressText, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, maxLines = 1)
             }
+
             Spacer(modifier = Modifier.height(24.dp))
+
             Button(
                 onClick = { 
                     val db = FirebaseDatabase.getInstance().getReference("trips")
                     val newId = UUID.randomUUID().toString()
                     val trip = Trip(
                         tripId = newId,
-                        customerId = "Yabu (Auto-GPS)",
+                        customerId = "Yabu (Amharic)",
                         pickupLocation = Location(currentGeoPoint.latitude, currentGeoPoint.longitude, addressText),
                         price = 150.0,
                         status = TripStatus.REQUESTED
                     )
                     db.child(newId).setValue(trip)
-                    Toast.makeText(context, "Request sent!", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, "ጥያቄ ተልኳል!", Toast.LENGTH_SHORT).show() // Request Sent
                 },
                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFDD835)),
                 modifier = Modifier.fillMaxWidth().height(50.dp)
             ) {
-                Text("Confirm Pickup", color = Color.Black, fontWeight = FontWeight.Bold)
+                Text("አረጋግጥ", color = Color.Black, fontWeight = FontWeight.Bold) // Confirm
             }
         }
     }
 }
-// Forced Update for GPS Fix
