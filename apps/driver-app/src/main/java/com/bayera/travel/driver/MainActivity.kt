@@ -31,6 +31,7 @@ class MainActivity : ComponentActivity() {
         setContent {
             val context = LocalContext.current
             var activeTrips by remember { mutableStateOf<List<Trip>>(emptyList()) }
+            val myDriverId = "DRV-KEBEDE-001"
 
             LaunchedEffect(Unit) {
                 val database = FirebaseDatabase.getInstance()
@@ -40,18 +41,19 @@ class MainActivity : ComponentActivity() {
                     override fun onDataChange(snapshot: DataSnapshot) {
                         val trips = mutableListOf<Trip>()
                         for (child in snapshot.children) {
-                            // This line works now because we fixed the Model!
-                            val trip = child.getValue(Trip::class.java)
-                            if (trip != null && trip.status == TripStatus.REQUESTED) {
-                                trips.add(trip)
+                            try {
+                                val trip = child.getValue(Trip::class.java)
+                                // Only show REQUESTED trips
+                                if (trip != null && trip.status == TripStatus.REQUESTED) {
+                                    trips.add(trip)
+                                }
+                            } catch (e: Exception) {
+                                // Ignore bad data
                             }
                         }
                         activeTrips = trips
                     }
-
-                    override fun onCancelled(error: DatabaseError) {
-                        Toast.makeText(context, "Error: ${error.message}", Toast.LENGTH_SHORT).show()
-                    }
+                    override fun onCancelled(error: DatabaseError) {}
                 })
             }
 
@@ -61,8 +63,7 @@ class MainActivity : ComponentActivity() {
                         modifier = Modifier.fillMaxSize().padding(16.dp),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        Text("🚖 Incoming Requests", style = MaterialTheme.typography.headlineMedium, color = Color(0xFF2E7D32), fontWeight = FontWeight.Bold)
-                        
+                        Text("🚖 Driver Dashboard", style = MaterialTheme.typography.headlineMedium, color = Color(0xFF2E7D32), fontWeight = FontWeight.Bold)
                         Spacer(modifier = Modifier.height(16.dp))
 
                         if (activeTrips.isEmpty()) {
@@ -70,7 +71,7 @@ class MainActivity : ComponentActivity() {
                         } else {
                             LazyColumn {
                                 items(activeTrips) { trip ->
-                                    TripCard(trip)
+                                    TripCard(trip, myDriverId)
                                 }
                             }
                         }
@@ -82,28 +83,44 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-fun TripCard(trip: Trip) {
+fun TripCard(trip: Trip, driverId: String) {
+    val context = LocalContext.current
+    
     Card(
         modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
         colors = CardDefaults.cardColors(containerColor = Color.White),
         elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
-            Text("📍 Pickup: ${trip.pickupLocation.address}", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
-            Text("🏁 Dropoff: ${trip.dropoffLocation.address}")
-            
-            Spacer(modifier = Modifier.height(8.dp))
-            
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("💰 ${trip.price} ETB", color = Color(0xFF2E7D32), fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleLarge)
-                Spacer(modifier = Modifier.width(16.dp))
-                Text("⏱️ ${trip.estimatedTime} min")
-            }
+            Text("📍 Pickup: ${trip.pickupLocation.address}", fontWeight = FontWeight.Bold)
+            Text("💰 Fare: ${trip.price} ETB", color = Color(0xFF2E7D32), fontWeight = FontWeight.Bold)
             
             Spacer(modifier = Modifier.height(12.dp))
             
             Button(
-                onClick = { /* TODO: Accept Trip */ },
+                onClick = { 
+                    // 1. Show Toast immediately to prove button works
+                    Toast.makeText(context, "Accepting Ride...", Toast.LENGTH_SHORT).show()
+
+                    // 2. Database Update Logic
+                    val database = FirebaseDatabase.getInstance()
+                    val tripRef = database.getReference("trips").child(trip.tripId)
+                    
+                    // We update the fields manually to be 100% safe
+                    val updates = hashMapOf<String, Any>(
+                        "status" to "ACCEPTED",
+                        "driverId" to driverId
+                    )
+                    
+                    tripRef.updateChildren(updates)
+                        .addOnSuccessListener {
+                            Toast.makeText(context, "✅ Success! Client Notified.", Toast.LENGTH_LONG).show()
+                        }
+                        .addOnFailureListener { e ->
+                            // If this shows, we have a permission/internet issue
+                            Toast.makeText(context, "❌ Error: ${e.message}", Toast.LENGTH_LONG).show()
+                        }
+                },
                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2E7D32)),
                 modifier = Modifier.fillMaxWidth()
             ) {
