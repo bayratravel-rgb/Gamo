@@ -9,9 +9,9 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material.icons.filled.LocationOn // Standard Pin
 import androidx.compose.material.icons.filled.Menu
-import androidx.compose.material.icons.filled.MyLocation
+import androidx.compose.material.icons.filled.Place // Replacement for MyLocation
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -56,7 +56,7 @@ fun AppUI() {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     
-    // Default to Arba Minch
+    // Arba Minch Coordinates
     val startGeo = GeoPoint(6.0206, 37.5557)
     
     var addressText by remember { mutableStateOf("Fetching location...") }
@@ -65,18 +65,14 @@ fun AppUI() {
 
     Box(modifier = Modifier.fillMaxSize()) {
         
-        // 1. THE MAP
+        // 1. MAP
         AndroidView(
             factory = { ctx ->
                 MapView(ctx).apply {
                     setTileSource(TileSourceFactory.MAPNIK)
                     setMultiTouchControls(true)
-                    
-                    // --- FIX THE ZOOM & POSITION ---
-                    controller.setZoom(18.0) // Very close zoom (Street Level)
+                    controller.setZoom(18.0)
                     controller.setCenter(startGeo)
-                    
-                    // Optional: Restrict zoom so user can't zoom out to "World View"
                     minZoomLevel = 10.0
                     maxZoomLevel = 20.0
 
@@ -100,20 +96,18 @@ fun AppUI() {
             modifier = Modifier.fillMaxSize()
         )
 
-        // DETECT IDLE STATE
+        // DETECT IDLE
         LaunchedEffect(isMapMoving) {
             if (isMapMoving) {
-                kotlinx.coroutines.delay(800) // Wait for movement to stop
+                kotlinx.coroutines.delay(800)
                 isMapMoving = false 
                 
-                // Get Address Name
                 scope.launch(Dispatchers.IO) {
                     try {
                         val geocoder = Geocoder(context, Locale.getDefault())
                         val addresses = geocoder.getFromLocation(currentGeoPoint.latitude, currentGeoPoint.longitude, 1)
                         if (!addresses.isNullOrEmpty()) {
                             val line = addresses[0].getAddressLine(0)
-                            // Clean up the address string
                             val shortAddr = line.split(",").take(2).joinToString(",")
                             withContext(Dispatchers.Main) { addressText = shortAddr }
                         }
@@ -124,12 +118,12 @@ fun AppUI() {
             }
         }
 
-        // 2. CENTER PIN (Floating)
+        // 2. CENTER PIN
         Icon(
             imageVector = Icons.Default.LocationOn,
             contentDescription = "Pin",
             modifier = Modifier.size(50.dp).align(Alignment.Center).offset(y = (-25).dp),
-            tint = Color(0xFFD32F2F) // Red Pin
+            tint = Color(0xFFD32F2F)
         )
 
         // 3. TOP MENU
@@ -153,9 +147,9 @@ fun AppUI() {
             
             Spacer(modifier = Modifier.height(16.dp))
             
-            // Address Row
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Default.MyLocation, contentDescription = null, tint = Color(0xFF1E88E5))
+                // CHANGED ICON HERE (Used 'Place' instead of 'MyLocation')
+                Icon(Icons.Default.Place, contentDescription = null, tint = Color(0xFF1E88E5))
                 Spacer(modifier = Modifier.width(12.dp))
                 Text(
                     text = addressText,
@@ -181,7 +175,7 @@ fun AppUI() {
                     db.child(newId).setValue(trip)
                     Toast.makeText(context, "Request sent!", Toast.LENGTH_SHORT).show()
                 },
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFDD835)), // Yellow Button
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFDD835)),
                 modifier = Modifier.fillMaxWidth().height(50.dp)
             ) {
                 Text("Confirm Pickup", color = Color.Black, fontWeight = FontWeight.Bold)
