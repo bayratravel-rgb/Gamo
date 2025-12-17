@@ -1,6 +1,7 @@
 package com.bayera.travel.customer
 
 import android.Manifest
+import android.content.Context
 import android.content.pm.PackageManager
 import android.location.Geocoder
 import android.os.Bundle
@@ -28,12 +29,18 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
+import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.composable
+import androidx.navigation.compose.rememberNavController
 import com.bayera.travel.common.models.Trip
 import com.bayera.travel.common.models.Location
 import com.bayera.travel.common.models.TripStatus
 import com.google.android.gms.location.LocationServices
 import com.google.firebase.FirebaseApp
+import com.google.firebase.database.DataSnapshot
+import com.google.firebase.database.DatabaseError
 import com.google.firebase.database.FirebaseDatabase
+import com.google.firebase.database.ValueEventListener
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -54,23 +61,53 @@ class MainActivity : ComponentActivity() {
         Configuration.getInstance().userAgentValue = packageName
 
         setContent {
-            AppUI()
+            val navController = rememberNavController()
+            val context = LocalContext.current
+            val prefs = context.getSharedPreferences("user_prefs", Context.MODE_PRIVATE)
+            
+            // Check Login Status
+            val startScreen = if (prefs.getString("name", "").isNullOrEmpty()) "login" else "home"
+
+            NavHost(navController = navController, startDestination = startScreen) {
+                composable("login") { LoginScreen(navController) }
+                composable("home") { HomeScreen() }
+            }
         }
     }
 }
 
 @Composable
-fun AppUI() {
+fun HomeScreen() {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    val prefs = context.getSharedPreferences("user_prefs", Context.MODE_PRIVATE)
+    val userName = prefs.getString("name", "User") ?: "User"
+    val userPhone = prefs.getString("phone", "") ?: ""
+
+    // --- ZOOM LIMITS ---
+    val ethiopiaCenter = GeoPoint(9.145, 40.489)
     
-    // Default: Arba Minch
-    val startGeo = GeoPoint(6.0206, 37.5557)
-    
-    var addressText by remember { mutableStateOf("አካባቢውን በመፈለግ ላይ...") } // "Locating..."
-    var currentGeoPoint by remember { mutableStateOf(startGeo) }
+    var addressText by remember { mutableStateOf("አካባቢውን በመፈለግ ላይ...") }
+    var currentGeoPoint by remember { mutableStateOf(ethiopiaCenter) }
     var isMapMoving by remember { mutableStateOf(false) }
     var mapController: org.osmdroid.api.IMapController? by remember { mutableStateOf(null) }
+    
+    // --- HANDSHAKE LOGIC ---
+    var currentTrip by remember { mutableStateOf<Trip?>(null) }
+
+    // Listen for Trip Updates (Driver Accepted?)
+    LaunchedEffect(currentTrip?.tripId) {
+        if (currentTrip != null) {
+            val db = FirebaseDatabase.getInstance().getReference("trips").child(currentTrip!!.tripId)
+            db.addValueEventListener(object : ValueEventListener {
+                override fun onDataChange(snapshot: DataSnapshot) {
+                    val updatedTrip = snapshot.getValue(Trip::class.java)
+                    if (updatedTrip != null) currentTrip = updatedTrip
+                }
+                override fun onCancelled(e: DatabaseError) {}
+            })
+        }
+    }
 
     val fusedLocationClient = remember { LocationServices.getFusedLocationProviderClient(context) }
 
@@ -90,9 +127,7 @@ fun AppUI() {
     val permissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestMultiplePermissions()
     ) { permissions ->
-        if (permissions[Manifest.permission.ACCESS_FINE_LOCATION] == true) {
-            zoomToUser()
-        }
+        if (permissions[Manifest.permission.ACCESS_FINE_LOCATION] == true) zoomToUser()
     }
 
     LaunchedEffect(Unit) {
@@ -109,33 +144,31 @@ fun AppUI() {
         AndroidView(
             factory = { ctx ->
                 MapView(ctx).apply {
-                    setTileSource(TileSourceFactory.MAPNIK) // Using Standard Map
+                    setTileSource(TileSourceFactory.MAPNIK)
                     setMultiTouchControls(true)
                     isTilesScaledToDpi = true 
-                    controller.setZoom(15.0)
-                    controller.setCenter(startGeo)
+                    
+                    // --- ENFORCE ZOOM LIMITS ---
+                    minZoomLevel = 6.0 // Can't zoom out past Ethiopia view
+                    maxZoomLevel = 22.0
+                    
+                    controller.setZoom(6.0)
+                    controller.setCenter(ethiopiaCenter)
                     mapController = controller
 
                     addMapListener(object : MapListener {
-                        override fun onScroll(event: ScrollEvent?): Boolean {
-                            isMapMoving = true
-                            return true
-                        }
-                        override fun onZoom(event: ZoomEvent?): Boolean {
-                            isMapMoving = true
-                            return true
-                        }
+                        override fun onScroll(event: ScrollEvent?): Boolean { isMapMoving = true; return true }
+                        override fun onZoom(event: ZoomEvent?): Boolean { isMapMoving = true; return true }
                     })
                 }
             },
             update = { mapView ->
-                if (isMapMoving) {
-                    currentGeoPoint = mapView.mapCenter as GeoPoint
-                }
+                if (isMapMoving) currentGeoPoint = mapView.mapCenter as GeoPoint
             },
             modifier = Modifier.fillMaxSize()
         )
 
+        // Address Fetcher
         LaunchedEffect(isMapMoving) {
             if (isMapMoving) {
                 kotlinx.coroutines.delay(800)
@@ -150,13 +183,13 @@ fun AppUI() {
                             withContext(Dispatchers.Main) { addressText = shortAddr }
                         }
                     } catch (e: Exception) {
-                        withContext(Dispatchers.Main) { addressText = "የማይታወቅ ቦታ" } // Unknown Loc
+                        withContext(Dispatchers.Main) { addressText = "የማይታወቅ ቦታ" }
                     }
                 }
             }
         }
 
-        // Pin
+        // Center Pin
         Icon(
             imageVector = Icons.Default.LocationOn,
             contentDescription = "Pin",
@@ -164,32 +197,25 @@ fun AppUI() {
             tint = Color(0xFFD32F2F)
         )
 
-        // AMHARIC SEARCH BAR
+        // Search Bar
         Card(
-            modifier = Modifier
-                .align(Alignment.TopCenter)
-                .padding(top = 50.dp, start = 16.dp, end = 16.dp)
-                .fillMaxWidth(),
+            modifier = Modifier.align(Alignment.TopCenter).padding(top = 50.dp, start = 16.dp, end = 16.dp).fillMaxWidth(),
             shape = RoundedCornerShape(8.dp),
             colors = CardDefaults.cardColors(containerColor = Color.White),
             elevation = CardDefaults.cardElevation(defaultElevation = 6.dp)
         ) {
-            Row(
-                modifier = Modifier.padding(16.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
+            Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Default.Menu, contentDescription = "Menu", tint = Color.Gray)
                 Spacer(modifier = Modifier.width(16.dp))
                 Column {
-                    Text("ወዴት ነው?", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold) // Where to?
-                    Text("መዳረሻዎን ያስገቡ", style = MaterialTheme.typography.bodySmall, color = Color.Gray) // Enter dest
+                    Text("ወዴት ነው?", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    Text("መዳረሻዎን ያስገቡ", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
                 }
                 Spacer(modifier = Modifier.weight(1f))
                 Icon(Icons.Default.Search, contentDescription = "Search", tint = Color(0xFF1E88E5))
             }
         }
 
-        // GPS Button
         FloatingActionButton(
             onClick = { zoomToUser() },
             modifier = Modifier.align(Alignment.CenterEnd).padding(end = 16.dp).offset(y = 50.dp),
@@ -198,7 +224,7 @@ fun AppUI() {
             Icon(Icons.Default.MyLocation, contentDescription = "My Location", tint = Color(0xFF1E88E5))
         }
 
-        // AMHARIC BOTTOM SHEET
+        // --- DYNAMIC BOTTOM SHEET ---
         Column(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
@@ -206,35 +232,56 @@ fun AppUI() {
                 .background(Color.White, shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp))
                 .padding(24.dp)
         ) {
-            Text("የመነሻ ቦታን ያረጋግጡ", style = MaterialTheme.typography.bodyMedium, color = Color.Gray) // Confirm Pickup
-            Spacer(modifier = Modifier.height(8.dp))
-            
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Default.Place, contentDescription = null, tint = Color(0xFF1E88E5))
-                Spacer(modifier = Modifier.width(12.dp))
-                Text(text = addressText, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, maxLines = 1)
-            }
-
-            Spacer(modifier = Modifier.height(24.dp))
-
-            Button(
-                onClick = { 
-                    val db = FirebaseDatabase.getInstance().getReference("trips")
-                    val newId = UUID.randomUUID().toString()
-                    val trip = Trip(
-                        tripId = newId,
-                        customerId = "Yabu (Amharic)",
-                        pickupLocation = Location(currentGeoPoint.latitude, currentGeoPoint.longitude, addressText),
-                        price = 150.0,
-                        status = TripStatus.REQUESTED
-                    )
-                    db.child(newId).setValue(trip)
-                    Toast.makeText(context, "ጥያቄ ተልኳል!", Toast.LENGTH_SHORT).show() // Request Sent
-                },
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFDD835)),
-                modifier = Modifier.fillMaxWidth().height(50.dp)
-            ) {
-                Text("አረጋግጥ", color = Color.Black, fontWeight = FontWeight.Bold) // Confirm
+            if (currentTrip == null) {
+                // STATE 1: IDLE
+                Text("የመነሻ ቦታን ያረጋግጡ", style = MaterialTheme.typography.bodyMedium, color = Color.Gray)
+                Spacer(modifier = Modifier.height(8.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.Place, contentDescription = null, tint = Color(0xFF1E88E5))
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Text(text = addressText, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, maxLines = 1)
+                }
+                Spacer(modifier = Modifier.height(24.dp))
+                Button(
+                    onClick = { 
+                        val db = FirebaseDatabase.getInstance().getReference("trips")
+                        val newId = UUID.randomUUID().toString()
+                        val trip = Trip(
+                            tripId = newId,
+                            customerId = "$userName ($userPhone)",
+                            pickupLocation = Location(currentGeoPoint.latitude, currentGeoPoint.longitude, addressText),
+                            price = 150.0,
+                            status = TripStatus.REQUESTED
+                        )
+                        db.child(newId).setValue(trip)
+                        currentTrip = trip
+                        Toast.makeText(context, "ጥያቄ ተልኳል!", Toast.LENGTH_SHORT).show()
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFDD835)),
+                    modifier = Modifier.fillMaxWidth().height(50.dp)
+                ) {
+                    Text("አረጋግጥ", color = Color.Black, fontWeight = FontWeight.Bold)
+                }
+            } else if (currentTrip!!.status == TripStatus.REQUESTED) {
+                // STATE 2: WAITING
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    CircularProgressIndicator(color = Color(0xFF1E88E5), modifier = Modifier.size(24.dp))
+                    Spacer(modifier = Modifier.width(16.dp))
+                    Text("ሹፌር በመፈለግ ላይ...", style = MaterialTheme.typography.titleMedium)
+                }
+            } else if (currentTrip!!.status == TripStatus.ACCEPTED) {
+                // STATE 3: ACCEPTED
+                Text("✅ ሹፌር ተገኝቷል!", style = MaterialTheme.typography.headlineSmall, color = Color(0xFF2E7D32), fontWeight = FontWeight.Bold)
+                Spacer(modifier = Modifier.height(8.dp))
+                Text("ሹፌር: ${currentTrip!!.driverId}", style = MaterialTheme.typography.bodyLarge)
+                Spacer(modifier = Modifier.height(16.dp))
+                Button(
+                    onClick = { /* Call Driver Logic */ },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2E7D32)),
+                    modifier = Modifier.fillMaxWidth().height(50.dp)
+                ) {
+                    Text("ይደውሉ", color = Color.White, fontWeight = FontWeight.Bold)
+                }
             }
         }
     }
