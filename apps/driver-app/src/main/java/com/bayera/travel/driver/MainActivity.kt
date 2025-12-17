@@ -71,13 +71,12 @@ fun DashboardScreen(navController: NavController) {
                 for (child in snapshot.children) {
                     try {
                         val trip = child.getValue(Trip::class.java)
-                        // STRICT FILTER: Only show REQUESTED trips
                         if (trip != null && trip.status == TripStatus.REQUESTED) {
                             trips.add(trip)
                         }
                     } catch (e: Exception) {}
                 }
-                activeTrips = trips.reversed() // Newest first
+                activeTrips = trips.reversed()
             }
             override fun onCancelled(error: DatabaseError) {}
         })
@@ -158,7 +157,6 @@ fun TripCard(trip: Trip, driverDetails: String, onDecline: () -> Unit) {
                 
                 Button(
                     onClick = { 
-                        // --- TRANSACTION LOGIC (Prevents Conflict) ---
                         val tripRef = FirebaseDatabase.getInstance().getReference("trips").child(trip.tripId)
                         
                         tripRef.runTransaction(object : Transaction.Handler {
@@ -168,14 +166,15 @@ fun TripCard(trip: Trip, driverDetails: String, onDecline: () -> Unit) {
                                     return Transaction.success(mutableData)
                                 }
                                 
-                                // Only accept if it's STILL 'REQUESTED'
                                 if (currentTrip.status == TripStatus.REQUESTED) {
-                                    currentTrip.status = TripStatus.ACCEPTED
-                                    currentTrip.driverId = driverDetails // Assign ME
-                                    mutableData.value = currentTrip
+                                    // FIXED: Use .copy() to update immutable val properties
+                                    val updatedTrip = currentTrip.copy(
+                                        status = TripStatus.ACCEPTED,
+                                        driverId = driverDetails
+                                    )
+                                    mutableData.value = updatedTrip
                                     return Transaction.success(mutableData)
                                 } else {
-                                    // Too late! Someone else took it.
                                     return Transaction.abort()
                                 }
                             }
