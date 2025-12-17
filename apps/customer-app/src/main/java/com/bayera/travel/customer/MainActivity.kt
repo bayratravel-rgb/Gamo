@@ -15,7 +15,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Menu
-import androidx.compose.material.icons.filled.MyLocation
+import androidx.compose.material.icons.filled.MyLocation // FIXED: Added Import
 import androidx.compose.material.icons.filled.Place
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -63,7 +63,7 @@ fun AppUI() {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     
-    // Default View (Ethiopia) - Fallback
+    // Default: Ethiopia Center
     val ethiopiaCenter = GeoPoint(9.145, 40.489)
     
     var addressText by remember { mutableStateOf("Locating you...") }
@@ -76,19 +76,17 @@ fun AppUI() {
     // --- AUTO-LOCATE LOGIC ---
     fun zoomToUser() {
         try {
-            fusedLocationClient.lastLocation.addOnSuccessListener { location ->
-                if (location != null) {
-                    val userPos = GeoPoint(location.latitude, location.longitude)
-                    // Fly to user immediately
+            fusedLocationClient.lastLocation.addOnSuccessListener { loc -> // Renamed variable to 'loc'
+                if (loc != null) {
+                    val userPos = GeoPoint(loc.latitude, loc.longitude)
                     mapController?.animateTo(userPos)
                     mapController?.setZoom(18.0)
-                    currentGeoPoint = userPos // Update pin immediately
+                    currentGeoPoint = userPos
                 }
             }
         } catch (e: SecurityException) {}
     }
 
-    // Permission Handler
     val permissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestMultiplePermissions()
     ) { permissions ->
@@ -97,7 +95,7 @@ fun AppUI() {
         }
     }
 
-    // TRIGGER ON STARTUP
+    // Trigger on Start
     LaunchedEffect(Unit) {
         if (ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) 
             == PackageManager.PERMISSION_GRANTED) {
@@ -138,7 +136,6 @@ fun AppUI() {
             modifier = Modifier.fillMaxSize()
         )
 
-        // Address Fetcher
         LaunchedEffect(isMapMoving) {
             if (isMapMoving) {
                 kotlinx.coroutines.delay(800)
@@ -159,7 +156,6 @@ fun AppUI() {
             }
         }
 
-        // Center Pin
         Icon(
             imageVector = Icons.Default.LocationOn,
             contentDescription = "Pin",
@@ -167,16 +163,15 @@ fun AppUI() {
             tint = Color(0xFFD32F2F)
         )
 
-        // GPS Button (Manual trigger)
         FloatingActionButton(
             onClick = { zoomToUser() },
             modifier = Modifier.align(Alignment.TopEnd).padding(top = 40.dp, end = 16.dp),
             containerColor = Color.White
         ) {
+            // FIXED: Using 'MyLocation' which is now imported
             Icon(Icons.Default.MyLocation, contentDescription = "My Location", tint = Color(0xFF1E88E5))
         }
 
-        // Bottom Sheet
         Column(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
