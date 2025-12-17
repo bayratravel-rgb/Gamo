@@ -9,9 +9,9 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.LocationOn // Standard Pin
+import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Menu
-import androidx.compose.material.icons.filled.Place // Replacement for MyLocation
+import androidx.compose.material.icons.filled.Place
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -56,25 +56,25 @@ fun AppUI() {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     
-    // Arba Minch Coordinates
-    val startGeo = GeoPoint(6.0206, 37.5557)
+    // --- ZOOM FIX: Start zoomed out to see Ethiopia/Africa ---
+    // GeoPoint for Ethiopia Center approx
+    val startGeo = GeoPoint(9.145, 40.489)
     
-    var addressText by remember { mutableStateOf("Fetching location...") }
+    var addressText by remember { mutableStateOf("Drag map to select location...") }
     var currentGeoPoint by remember { mutableStateOf(startGeo) }
     var isMapMoving by remember { mutableStateOf(false) }
 
     Box(modifier = Modifier.fillMaxSize()) {
         
-        // 1. MAP
         AndroidView(
             factory = { ctx ->
                 MapView(ctx).apply {
                     setTileSource(TileSourceFactory.MAPNIK)
                     setMultiTouchControls(true)
-                    controller.setZoom(18.0)
+                    
+                    // LEVEL 6 = Country/Continent View (Zoomed Out)
+                    controller.setZoom(6.0) 
                     controller.setCenter(startGeo)
-                    minZoomLevel = 10.0
-                    maxZoomLevel = 20.0
 
                     addMapListener(object : MapListener {
                         override fun onScroll(event: ScrollEvent?): Boolean {
@@ -96,19 +96,19 @@ fun AppUI() {
             modifier = Modifier.fillMaxSize()
         )
 
-        // DETECT IDLE
+        // Address Finder Logic
         LaunchedEffect(isMapMoving) {
             if (isMapMoving) {
-                kotlinx.coroutines.delay(800)
+                kotlinx.coroutines.delay(1000)
                 isMapMoving = false 
-                
                 scope.launch(Dispatchers.IO) {
                     try {
                         val geocoder = Geocoder(context, Locale.getDefault())
                         val addresses = geocoder.getFromLocation(currentGeoPoint.latitude, currentGeoPoint.longitude, 1)
                         if (!addresses.isNullOrEmpty()) {
                             val line = addresses[0].getAddressLine(0)
-                            val shortAddr = line.split(",").take(2).joinToString(",")
+                            // Use first 3 parts of address for better detail
+                            val shortAddr = line.split(",").take(3).joinToString(",")
                             withContext(Dispatchers.Main) { addressText = shortAddr }
                         }
                     } catch (e: Exception) {
@@ -118,7 +118,7 @@ fun AppUI() {
             }
         }
 
-        // 2. CENTER PIN
+        // Center Pin
         Icon(
             imageVector = Icons.Default.LocationOn,
             contentDescription = "Pin",
@@ -126,16 +126,7 @@ fun AppUI() {
             tint = Color(0xFFD32F2F)
         )
 
-        // 3. TOP MENU
-        SmallFloatingActionButton(
-            onClick = {},
-            modifier = Modifier.padding(top = 40.dp, start = 16.dp).align(Alignment.TopStart),
-            containerColor = Color.White
-        ) {
-            Icon(Icons.Default.Menu, contentDescription = "Menu")
-        }
-
-        // 4. BOTTOM SHEET
+        // Bottom Sheet
         Column(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
@@ -143,37 +134,39 @@ fun AppUI() {
                 .background(Color.White, shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp))
                 .padding(24.dp)
         ) {
-            Text("Confirm pick-up point", style = MaterialTheme.typography.titleMedium, color = Color.Gray)
-            
+            Text("Confirm Pickup Point", style = MaterialTheme.typography.titleMedium, color = Color.Gray)
             Spacer(modifier = Modifier.height(16.dp))
             
             Row(verticalAlignment = Alignment.CenterVertically) {
-                // CHANGED ICON HERE (Used 'Place' instead of 'MyLocation')
                 Icon(Icons.Default.Place, contentDescription = null, tint = Color(0xFF1E88E5))
                 Spacer(modifier = Modifier.width(12.dp))
-                Text(
-                    text = addressText,
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold,
-                    maxLines = 2
-                )
+                Text(text = addressText, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, maxLines = 2)
             }
 
             Spacer(modifier = Modifier.height(24.dp))
 
             Button(
                 onClick = { 
+                    Toast.makeText(context, "Sending Request...", Toast.LENGTH_SHORT).show()
+                    
                     val db = FirebaseDatabase.getInstance().getReference("trips")
                     val newId = UUID.randomUUID().toString()
+                    
                     val trip = Trip(
                         tripId = newId,
-                        customerId = "Yabu (Map User)",
+                        customerId = "Yabu", // We can fix the name dynamic later
                         pickupLocation = Location(currentGeoPoint.latitude, currentGeoPoint.longitude, addressText),
                         price = 150.0,
                         status = TripStatus.REQUESTED
                     )
+                    
                     db.child(newId).setValue(trip)
-                    Toast.makeText(context, "Request sent!", Toast.LENGTH_SHORT).show()
+                        .addOnSuccessListener { 
+                             Toast.makeText(context, "Request Sent to Drivers! 🚕", Toast.LENGTH_LONG).show()
+                        }
+                        .addOnFailureListener {
+                             Toast.makeText(context, "Failed: ${it.message}", Toast.LENGTH_LONG).show()
+                        }
                 },
                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFDD835)),
                 modifier = Modifier.fillMaxWidth().height(50.dp)
