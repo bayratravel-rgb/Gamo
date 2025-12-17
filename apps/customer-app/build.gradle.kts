@@ -12,8 +12,8 @@ android {
         applicationId = "com.bayera.travel.customer"
         minSdk = 24
         targetSdk = 34
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = 2
+        versionName = "1.1"
     }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
@@ -27,16 +27,18 @@ android {
 dependencies {
     implementation(project(":packages:shared-types"))
     
-    // --- ADDED: Navigation Library ---
-    implementation("androidx.navigation:navigation-compose:2.7.6")
+    // --- ADDED: Google Location Services ---
+    implementation("com.google.android.gms:play-services-location:21.0.1")
+
+    // Map
+    implementation("org.osmdroid:osmdroid-android:6.1.16")
 
     // Firebase
     implementation(platform("com.google.firebase:firebase-bom:32.7.0"))
     implementation("com.google.firebase:firebase-database-ktx")
     implementation("com.google.firebase:firebase-common-ktx")
 
-    // UI & Map
-    implementation("org.osmdroid:osmdroid-android:6.1.16")
+    // Core & UI
     implementation("androidx.core:core-ktx:1.12.0")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.6.2")
     implementation("androidx.activity:activity-compose:1.8.1")
@@ -45,4 +47,7 @@ dependencies {
     implementation("androidx.compose.ui:ui-graphics")
     implementation("androidx.compose.ui:ui-tooling-preview")
     implementation("androidx.compose.material3:material3")
+    
+    // Icons
+    implementation("androidx.compose.material:material-icons-extended:1.5.4")
 }
