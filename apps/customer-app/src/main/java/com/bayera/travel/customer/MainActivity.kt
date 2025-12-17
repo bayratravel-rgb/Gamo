@@ -1,6 +1,6 @@
 package com.bayera.travel.customer
 
-import android.content.Context
+import android.location.Geocoder
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
@@ -8,6 +8,10 @@ import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -17,22 +21,22 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
-import androidx.navigation.compose.NavHost
-import androidx.navigation.compose.composable
-import androidx.navigation.compose.rememberNavController
-import org.osmdroid.tileprovider.tilesource.TileSourceFactory
-import org.osmdroid.util.GeoPoint
-import org.osmdroid.views.MapView
-import org.osmdroid.views.overlay.Marker
-import org.osmdroid.config.Configuration
-import com.google.firebase.FirebaseApp
-import com.google.firebase.database.DataSnapshot
-import com.google.firebase.database.DatabaseError
-import com.google.firebase.database.FirebaseDatabase
-import com.google.firebase.database.ValueEventListener
 import com.bayera.travel.common.models.Trip
 import com.bayera.travel.common.models.Location
 import com.bayera.travel.common.models.TripStatus
+import com.google.firebase.FirebaseApp
+import com.google.firebase.database.FirebaseDatabase
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import org.osmdroid.config.Configuration
+import org.osmdroid.events.MapListener
+import org.osmdroid.events.ScrollEvent
+import org.osmdroid.events.ZoomEvent
+import org.osmdroid.tileprovider.tilesource.TileSourceFactory
+import org.osmdroid.util.GeoPoint
+import org.osmdroid.views.MapView
+import java.util.Locale
 import java.util.UUID
 
 class MainActivity : ComponentActivity() {
@@ -42,97 +46,145 @@ class MainActivity : ComponentActivity() {
         Configuration.getInstance().userAgentValue = packageName
 
         setContent {
-            val navController = rememberNavController()
-            val context = LocalContext.current
-            val prefs = context.getSharedPreferences("user_prefs", Context.MODE_PRIVATE)
-            
-            // Auto-login check: If name exists, go straight to Home
-            val startScreen = if (prefs.getString("name", "").isNullOrEmpty()) "login" else "home"
-
-            NavHost(navController = navController, startDestination = startScreen) {
-                composable("login") { LoginScreen(navController) }
-                composable("home") { HomeScreen() }
-            }
+            AppUI()
         }
     }
 }
 
 @Composable
-fun HomeScreen() {
+fun AppUI() {
     val context = LocalContext.current
-    // Retrieve Saved User Name
-    val prefs = context.getSharedPreferences("user_prefs", Context.MODE_PRIVATE)
-    val userName = prefs.getString("name", "Unknown User") ?: "Unknown User"
+    val scope = rememberCoroutineScope()
     
-    var currentTrip by remember { mutableStateOf<Trip?>(null) }
-
-    LaunchedEffect(currentTrip?.tripId) {
-        if (currentTrip != null) {
-            val db = FirebaseDatabase.getInstance().getReference("trips").child(currentTrip!!.tripId)
-            db.addValueEventListener(object : ValueEventListener {
-                override fun onDataChange(snapshot: DataSnapshot) {
-                    val updatedTrip = snapshot.getValue(Trip::class.java)
-                    if (updatedTrip != null) currentTrip = updatedTrip
-                }
-                override fun onCancelled(e: DatabaseError) {}
-            })
-        }
-    }
+    // Default to Arba Minch
+    val startGeo = GeoPoint(6.0206, 37.5557)
+    
+    var addressText by remember { mutableStateOf("Fetching location...") }
+    var currentGeoPoint by remember { mutableStateOf(startGeo) }
+    var isMapMoving by remember { mutableStateOf(false) }
 
     Box(modifier = Modifier.fillMaxSize()) {
+        
+        // 1. THE MAP
         AndroidView(
             factory = { ctx ->
                 MapView(ctx).apply {
                     setTileSource(TileSourceFactory.MAPNIK)
                     setMultiTouchControls(true)
-                    controller.setZoom(15.0)
-                    controller.setCenter(GeoPoint(6.0206, 37.5557))
-                    val m = Marker(this)
-                    m.position = GeoPoint(6.0206, 37.5557)
-                    m.title = "Pickup"
-                    overlays.add(m)
+                    
+                    // --- FIX THE ZOOM & POSITION ---
+                    controller.setZoom(18.0) // Very close zoom (Street Level)
+                    controller.setCenter(startGeo)
+                    
+                    // Optional: Restrict zoom so user can't zoom out to "World View"
+                    minZoomLevel = 10.0
+                    maxZoomLevel = 20.0
+
+                    addMapListener(object : MapListener {
+                        override fun onScroll(event: ScrollEvent?): Boolean {
+                            isMapMoving = true
+                            return true
+                        }
+                        override fun onZoom(event: ZoomEvent?): Boolean {
+                            isMapMoving = true
+                            return true
+                        }
+                    })
+                }
+            },
+            update = { mapView ->
+                if (isMapMoving) {
+                    currentGeoPoint = mapView.mapCenter as GeoPoint
                 }
             },
             modifier = Modifier.fillMaxSize()
         )
 
-        Column(
-            modifier = Modifier.align(Alignment.BottomCenter)
-                .padding(16.dp)
-                .background(Color.White.copy(alpha = 0.95f), shape = RoundedCornerShape(16.dp))
-                .padding(24.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
+        // DETECT IDLE STATE
+        LaunchedEffect(isMapMoving) {
+            if (isMapMoving) {
+                kotlinx.coroutines.delay(800) // Wait for movement to stop
+                isMapMoving = false 
+                
+                // Get Address Name
+                scope.launch(Dispatchers.IO) {
+                    try {
+                        val geocoder = Geocoder(context, Locale.getDefault())
+                        val addresses = geocoder.getFromLocation(currentGeoPoint.latitude, currentGeoPoint.longitude, 1)
+                        if (!addresses.isNullOrEmpty()) {
+                            val line = addresses[0].getAddressLine(0)
+                            // Clean up the address string
+                            val shortAddr = line.split(",").take(2).joinToString(",")
+                            withContext(Dispatchers.Main) { addressText = shortAddr }
+                        }
+                    } catch (e: Exception) {
+                        withContext(Dispatchers.Main) { addressText = "Unknown Location" }
+                    }
+                }
+            }
+        }
+
+        // 2. CENTER PIN (Floating)
+        Icon(
+            imageVector = Icons.Default.LocationOn,
+            contentDescription = "Pin",
+            modifier = Modifier.size(50.dp).align(Alignment.Center).offset(y = (-25).dp),
+            tint = Color(0xFFD32F2F) // Red Pin
+        )
+
+        // 3. TOP MENU
+        SmallFloatingActionButton(
+            onClick = {},
+            modifier = Modifier.padding(top = 40.dp, start = 16.dp).align(Alignment.TopStart),
+            containerColor = Color.White
         ) {
-            if (currentTrip == null) {
-                Text("Hi, $userName 👋", style = MaterialTheme.typography.titleMedium, color = Color.Gray)
-                Text("Arba Minch Rides", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-                Spacer(modifier = Modifier.height(16.dp))
-                Button(
-                    onClick = { 
-                        val newId = UUID.randomUUID().toString()
-                        val newTrip = Trip(
-                            tripId = newId, 
-                            // SEND REAL NAME TO DRIVER
-                            customerId = "$userName (Ph: ${prefs.getString("phone", "")})",
-                            pickupLocation = Location(6.0206, 37.5557, "Arba Minch Airport"),
-                            dropoffLocation = Location(6.03, 37.56, "University"),
-                            price = 150.0, estimatedTime = 15, status = TripStatus.REQUESTED
-                        )
-                        FirebaseDatabase.getInstance().getReference("trips").child(newId).setValue(newTrip)
-                        currentTrip = newTrip
-                    },
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1E88E5)),
-                    modifier = Modifier.fillMaxWidth()
-                ) { Text("Confirm Pickup") }
-            } else if (currentTrip!!.status == TripStatus.REQUESTED) {
-                CircularProgressIndicator(color = Color(0xFF1E88E5))
-                Spacer(modifier = Modifier.height(8.dp))
-                Text("Finding a driver for $userName...", style = MaterialTheme.typography.bodyLarge)
-            } else if (currentTrip!!.status == TripStatus.ACCEPTED) {
-                Text("✅ Driver Found!", style = MaterialTheme.typography.headlineSmall, color = Color(0xFF2E7D32), fontWeight = FontWeight.Bold)
-                Spacer(modifier = Modifier.height(8.dp))
-                Text("Driver: ${currentTrip!!.driverId}", style = MaterialTheme.typography.bodyLarge)
-                Text("Arriving in ${currentTrip!!.estimatedTime} mins", style = MaterialTheme.typography.bodyMedium)
+            Icon(Icons.Default.Menu, contentDescription = "Menu")
+        }
+
+        // 4. BOTTOM SHEET
+        Column(
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .fillMaxWidth()
+                .background(Color.White, shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp))
+                .padding(24.dp)
+        ) {
+            Text("Confirm pick-up point", style = MaterialTheme.typography.titleMedium, color = Color.Gray)
+            
+            Spacer(modifier = Modifier.height(16.dp))
+            
+            // Address Row
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Default.MyLocation, contentDescription = null, tint = Color(0xFF1E88E5))
+                Spacer(modifier = Modifier.width(12.dp))
+                Text(
+                    text = addressText,
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 2
+                )
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            Button(
+                onClick = { 
+                    val db = FirebaseDatabase.getInstance().getReference("trips")
+                    val newId = UUID.randomUUID().toString()
+                    val trip = Trip(
+                        tripId = newId,
+                        customerId = "Yabu (Map User)",
+                        pickupLocation = Location(currentGeoPoint.latitude, currentGeoPoint.longitude, addressText),
+                        price = 150.0,
+                        status = TripStatus.REQUESTED
+                    )
+                    db.child(newId).setValue(trip)
+                    Toast.makeText(context, "Request sent!", Toast.LENGTH_SHORT).show()
+                },
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFDD835)), // Yellow Button
+                modifier = Modifier.fillMaxWidth().height(50.dp)
+            ) {
+                Text("Confirm Pickup", color = Color.Black, fontWeight = FontWeight.Bold)
             }
         }
     }
