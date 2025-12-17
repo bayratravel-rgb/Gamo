@@ -28,7 +28,10 @@ android {
 dependencies {
     implementation(project(":packages:shared-types"))
     
-    // --- FIREBASE (Explicitly added here) ---
+    // --- ADDED: Navigation ---
+    implementation("androidx.navigation:navigation-compose:2.7.6")
+
+    // Firebase
     implementation(platform("com.google.firebase:firebase-bom:32.7.0"))
     implementation("com.google.firebase:firebase-database-ktx")
     implementation("com.google.firebase:firebase-common-ktx")
