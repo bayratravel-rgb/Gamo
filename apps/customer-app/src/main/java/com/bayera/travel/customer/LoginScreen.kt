@@ -14,12 +14,12 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+// FIXED: Correct Navigation Import
 import androidx.navigation.NavController
 
 @Composable
 fun LoginScreen(navController: NavController) {
     val context = LocalContext.current
-    // Load saved data if it exists (Auto-fill)
     val prefs = context.getSharedPreferences("user_prefs", Context.MODE_PRIVATE)
     
     var phoneNumber by remember { mutableStateOf(prefs.getString("phone", "") ?: "") }
@@ -34,8 +34,6 @@ fun LoginScreen(navController: NavController) {
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Text("Welcome to Bayera", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold, color = Color(0xFF1E88E5))
-        Spacer(modifier = Modifier.height(8.dp))
-        Text("Enter your details to continue", color = Color.Gray)
         Spacer(modifier = Modifier.height(32.dp))
 
         OutlinedTextField(
@@ -43,7 +41,6 @@ fun LoginScreen(navController: NavController) {
             onValueChange = { name = it },
             label = { Text("Full Name") },
             modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(12.dp),
             colors = TextFieldDefaults.colors(focusedContainerColor = Color.White, unfocusedContainerColor = Color.White)
         )
 
@@ -55,7 +52,6 @@ fun LoginScreen(navController: NavController) {
             label = { Text("Phone Number") },
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
             modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(12.dp),
             colors = TextFieldDefaults.colors(focusedContainerColor = Color.White, unfocusedContainerColor = Color.White)
         )
 
@@ -63,17 +59,13 @@ fun LoginScreen(navController: NavController) {
 
         Button(
             onClick = {
-                if (name.isNotEmpty() && phoneNumber.isNotEmpty()) {
-                    // --- SAVE DATA LOCALLY ---
+                if (name.isNotEmpty()) {
                     prefs.edit().putString("name", name).putString("phone", phoneNumber).apply()
-                    
-                    // Go to Map
                     navController.navigate("home")
                 }
             },
             modifier = Modifier.fillMaxWidth().height(50.dp),
-            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1E88E5)),
-            shape = RoundedCornerShape(12.dp)
+            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1E88E5))
         ) {
             Text("Get Started")
         }
