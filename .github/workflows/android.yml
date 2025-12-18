@@ -38,7 +38,7 @@ jobs:
         name: DRIVER-APP
         path: apps/driver-app/build/outputs/apk/debug/*.apk
 
-    # --- UPLOAD HOTEL APP ---
+    # --- UPLOAD HOTEL APP (Fixed Path) ---
     - name: Upload Hotel App
       uses: actions/upload-artifact@v4
       with:
