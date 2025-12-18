@@ -27,10 +27,10 @@ android {
 dependencies {
     implementation(project(":packages:shared-types"))
     
-    // --- ADDED: Navigation Library (Crucial Fix) ---
-    implementation("androidx.navigation:navigation-compose:2.7.6")
+    // --- LINK UTILS MODULE ---
+    implementation(project(":packages:utils"))
 
-    // Google Location & Maps
+    // Location & Map
     implementation("com.google.android.gms:play-services-location:21.0.1")
     implementation("org.osmdroid:osmdroid-android:6.1.16")
 
@@ -48,7 +48,6 @@ dependencies {
     implementation("androidx.compose.ui:ui-graphics")
     implementation("androidx.compose.ui:ui-tooling-preview")
     implementation("androidx.compose.material3:material3")
-    
-    // Icons
+    implementation("androidx.navigation:navigation-compose:2.7.6")
     implementation("androidx.compose.material:material-icons-extended:1.5.4")
 }
