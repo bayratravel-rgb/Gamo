@@ -31,6 +31,7 @@ import androidx.core.content.ContextCompat
 import com.bayera.travel.common.models.Trip
 import com.bayera.travel.common.models.Location
 import com.bayera.travel.common.models.TripStatus
+// FIXED: IMPORT THE FARE CALCULATOR
 import com.bayera.travel.utils.FareCalculator
 import com.google.android.gms.location.LocationServices
 import com.google.firebase.FirebaseApp
@@ -65,14 +66,14 @@ fun AppUI() {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     
-    // Arba Minch Center
-    val startGeo = GeoPoint(6.0206, 37.5557)
-    // Reference Point: University (for price testing)
+    val ethiopiaCenter = GeoPoint(9.145, 40.489)
+    val startGeo = GeoPoint(6.0206, 37.5557) // Arba Minch Center
+    // Reference point for distance (e.g., University)
     val uniGeo = GeoPoint(6.04, 37.56) 
     
-    var addressText by remember { mutableStateOf("Locating...") }
-    var currentGeoPoint by remember { mutableStateOf(startGeo) }
-    var estimatedPrice by remember { mutableStateOf(50.0) } // Default Base
+    var addressText by remember { mutableStateOf("አካባቢውን በመፈለግ ላይ...") }
+    var currentGeoPoint by remember { mutableStateOf(ethiopiaCenter) }
+    var estimatedPrice by remember { mutableStateOf(50.0) }
     var isMapMoving by remember { mutableStateOf(false) }
     var mapController: org.osmdroid.api.IMapController? by remember { mutableStateOf(null) }
 
@@ -114,8 +115,8 @@ fun AppUI() {
                     setTileSource(TileSourceFactory.MAPNIK)
                     setMultiTouchControls(true)
                     isTilesScaledToDpi = true 
-                    controller.setZoom(15.0)
-                    controller.setCenter(startGeo)
+                    controller.setZoom(6.0)
+                    controller.setCenter(ethiopiaCenter)
                     mapController = controller
 
                     addMapListener(object : MapListener {
@@ -135,14 +136,13 @@ fun AppUI() {
                 kotlinx.coroutines.delay(500)
                 isMapMoving = false 
                 
-                // 1. Calculate Price Live
+                // Calculate Price
                 val dist = FareCalculator.calculateDistance(
                     currentGeoPoint.latitude, currentGeoPoint.longitude,
                     uniGeo.latitude, uniGeo.longitude
                 )
                 estimatedPrice = FareCalculator.calculatePrice(dist)
 
-                // 2. Fetch Address
                 scope.launch(Dispatchers.IO) {
                     try {
                         val geocoder = Geocoder(context, Locale.getDefault())
@@ -153,13 +153,12 @@ fun AppUI() {
                             withContext(Dispatchers.Main) { addressText = shortAddr }
                         }
                     } catch (e: Exception) {
-                        withContext(Dispatchers.Main) { addressText = "Unknown Location" }
+                        withContext(Dispatchers.Main) { addressText = "የማይታወቅ ቦታ" }
                     }
                 }
             }
         }
 
-        // Center Pin
         Icon(
             imageVector = Icons.Default.LocationOn,
             contentDescription = "Pin",
@@ -167,7 +166,6 @@ fun AppUI() {
             tint = Color(0xFFD32F2F)
         )
 
-        // GPS Button
         FloatingActionButton(
             onClick = { zoomToUser() },
             modifier = Modifier.align(Alignment.CenterEnd).padding(end = 16.dp).offset(y = 50.dp),
@@ -176,7 +174,6 @@ fun AppUI() {
             Icon(Icons.Default.MyLocation, contentDescription = "My Location", tint = Color(0xFF1E88E5))
         }
 
-        // BOTTOM SHEET
         Column(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
@@ -184,7 +181,7 @@ fun AppUI() {
                 .background(Color.White, shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp))
                 .padding(24.dp)
         ) {
-            Text("Confirm Pickup", style = MaterialTheme.typography.bodyMedium, color = Color.Gray)
+            Text("የመነሻ ቦታን ያረጋግጡ", style = MaterialTheme.typography.bodyMedium, color = Color.Gray)
             Spacer(modifier = Modifier.height(8.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Default.Place, contentDescription = null, tint = Color(0xFF1E88E5))
@@ -194,14 +191,13 @@ fun AppUI() {
             
             Spacer(modifier = Modifier.height(16.dp))
             
-            // PRICE ESTIMATE ROW
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text("Est. Fare (to Uni)", color = Color.Gray)
-                Text("$estimatedPrice ETB", style = MaterialTheme.typography.headlineSmall, color = Color(0xFF2E7D32), fontWeight = FontWeight.Bold)
+                Text("ግምታዊ ዋጋ", color = Color.Gray) // Est. Fare
+                Text("$estimatedPrice ብር", style = MaterialTheme.typography.headlineSmall, color = Color(0xFF2E7D32), fontWeight = FontWeight.Bold)
             }
 
             Spacer(modifier = Modifier.height(24.dp))
@@ -214,16 +210,16 @@ fun AppUI() {
                         tripId = newId,
                         customerId = "Yabu",
                         pickupLocation = Location(currentGeoPoint.latitude, currentGeoPoint.longitude, addressText),
-                        price = estimatedPrice, // SEND REAL PRICE
+                        price = estimatedPrice,
                         status = TripStatus.REQUESTED
                     )
                     db.child(newId).setValue(trip)
-                    Toast.makeText(context, "Request sent: $estimatedPrice ETB", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, "ጥያቄ ተልኳል: $estimatedPrice ብር", Toast.LENGTH_SHORT).show()
                 },
                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFDD835)),
                 modifier = Modifier.fillMaxWidth().height(50.dp)
             ) {
-                Text("Book Now", color = Color.Black, fontWeight = FontWeight.Bold)
+                Text("አረጋግጥ", color = Color.Black, fontWeight = FontWeight.Bold)
             }
         }
     }
