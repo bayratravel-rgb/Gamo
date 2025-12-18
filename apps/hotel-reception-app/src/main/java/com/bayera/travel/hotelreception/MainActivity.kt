@@ -8,8 +8,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Hotel
-import androidx.compose.material.icons.filled.LocalTaxi
+import androidx.compose.material.icons.filled.Home // Replaced Hotel
+import androidx.compose.material.icons.filled.Place // Replaced LocalTaxi
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -41,16 +41,17 @@ fun HotelDashboard() {
     val context = LocalContext.current
     var roomNumber by remember { mutableStateOf("") }
     var destination by remember { mutableStateOf("") }
-    var hotelName by remember { mutableStateOf("Haile Resort Arba Minch") } // Hardcoded for now
+    val hotelName = "Haile Resort Arba Minch"
 
     MaterialTheme {
-        Surface(modifier = Modifier.fillMaxSize(), color = Color(0xFFF3E5F5)) { // Light Purple
+        Surface(modifier = Modifier.fillMaxSize(), color = Color(0xFFF3E5F5)) {
             Column(
                 modifier = Modifier.fillMaxSize().padding(24.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center
             ) {
-                Icon(Icons.Default.Hotel, contentDescription = null, tint = Color(0xFF6A1B9A), modifier = Modifier.size(64.dp))
+                // FIXED: Used standard Home icon
+                Icon(Icons.Default.Home, contentDescription = null, tint = Color(0xFF6A1B9A), modifier = Modifier.size(64.dp))
                 Spacer(modifier = Modifier.height(16.dp))
                 
                 Text(hotelName, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold, color = Color(0xFF4A148C))
@@ -90,24 +91,24 @@ fun HotelDashboard() {
                                     val trip = Trip(
                                         tripId = newId,
                                         customerId = "$hotelName (Guest: $roomNumber)",
-                                        pickupLocation = Location(6.0206, 37.5557, hotelName), // Hotel Location
+                                        pickupLocation = Location(6.0206, 37.5557, hotelName),
                                         dropoffLocation = Location(0.0, 0.0, destination),
-                                        price = 200.0, // Fixed Hotel Rate?
+                                        price = 200.0,
                                         status = TripStatus.REQUESTED
                                     )
                                     
                                     db.child(newId).setValue(trip)
                                     Toast.makeText(context, "Taxi Requested for Room $roomNumber", Toast.LENGTH_LONG).show()
                                     
-                                    // Clear fields
                                     roomNumber = ""
                                     destination = ""
                                 }
                             },
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF6A1B9A)), // Purple
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF6A1B9A)),
                             modifier = Modifier.fillMaxWidth().height(50.dp)
                         ) {
-                            Icon(Icons.Default.LocalTaxi, contentDescription = null)
+                            // FIXED: Used standard Place icon
+                            Icon(Icons.Default.Place, contentDescription = null)
                             Spacer(modifier = Modifier.width(8.dp))
                             Text("CALL TAXI NOW")
                         }
