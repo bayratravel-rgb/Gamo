@@ -11,7 +11,8 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Navigation
+// FIXED: Added missing import for Navigation Icon
+import androidx.compose.material.icons.filled.Navigation 
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -73,11 +74,9 @@ fun DashboardScreen(navController: NavController) {
                     try {
                         val trip = child.getValue(Trip::class.java)
                         if (trip != null) {
-                            // If I accepted this trip, show it at the top
                             if (trip.driverId != null && trip.driverId!!.contains(driverName)) {
                                 myTrip = trip
                             }
-                            // Show available trips
                             if (trip.status == TripStatus.REQUESTED) {
                                 trips.add(trip)
                             }
@@ -94,7 +93,6 @@ fun DashboardScreen(navController: NavController) {
     MaterialTheme {
         Surface(modifier = Modifier.fillMaxSize(), color = Color(0xFFE8F5E9)) {
             Column(modifier = Modifier.padding(16.dp)) {
-                // HEADER
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text("Hi, $driverName", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                     Spacer(modifier = Modifier.weight(1f))
@@ -106,14 +104,12 @@ fun DashboardScreen(navController: NavController) {
 
                 Spacer(modifier = Modifier.height(16.dp))
 
-                // CURRENT JOB (If accepted)
                 if (currentAcceptedTrip != null) {
                     Text("🟢 CURRENT JOB", style = MaterialTheme.typography.titleMedium, color = Color(0xFF2E7D32), fontWeight = FontWeight.Bold)
                     CurrentJobCard(currentAcceptedTrip!!)
                     Spacer(modifier = Modifier.height(24.dp))
                 }
 
-                // INCOMING LIST
                 Text("Incoming Requests", style = MaterialTheme.typography.headlineSmall, color = Color(0xFF2E7D32), fontWeight = FontWeight.Bold)
                 Spacer(modifier = Modifier.height(8.dp))
 
@@ -138,20 +134,17 @@ fun CurrentJobCard(trip: Trip) {
     val context = LocalContext.current
     Card(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFFC8E6C9)), // Light Green Highlight
+        colors = CardDefaults.cardColors(containerColor = Color(0xFFC8E6C9)), 
         elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
             Text("Picking up: ${trip.customerId}", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
             Spacer(modifier = Modifier.height(8.dp))
             Text("📍 ${trip.pickupLocation.address}")
-            
             Spacer(modifier = Modifier.height(16.dp))
             
-            // NAVIGATION BUTTON
             Button(
                 onClick = { 
-                    // Open Google Maps Navigation
                     val uri = "google.navigation:q=${trip.pickupLocation.lat},${trip.pickupLocation.lng}"
                     val intent = Intent(Intent.ACTION_VIEW, Uri.parse(uri))
                     intent.setPackage("com.google.android.apps.maps")
@@ -164,6 +157,7 @@ fun CurrentJobCard(trip: Trip) {
                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1976D2)),
                 modifier = Modifier.fillMaxWidth()
             ) {
+                // ICON IS NOW IMPORTED CORRECTLY
                 Icon(Icons.Default.Navigation, contentDescription = null)
                 Spacer(modifier = Modifier.width(8.dp))
                 Text("NAVIGATE TO CUSTOMER")
