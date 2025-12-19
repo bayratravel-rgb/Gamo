@@ -31,7 +31,6 @@ import androidx.core.content.ContextCompat
 import com.bayera.travel.common.models.Trip
 import com.bayera.travel.common.models.Location
 import com.bayera.travel.common.models.TripStatus
-// FIXED: IMPORT THE FARE CALCULATOR
 import com.bayera.travel.utils.FareCalculator
 import com.google.android.gms.location.LocationServices
 import com.google.firebase.FirebaseApp
@@ -65,18 +64,23 @@ class MainActivity : ComponentActivity() {
 fun AppUI() {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    val prefs = context.getSharedPreferences("user_prefs", android.content.Context.MODE_PRIVATE)
+    val userName = prefs.getString("name", "User") ?: "User"
+    val userPhone = prefs.getString("phone", "") ?: ""
     
-    val ethiopiaCenter = GeoPoint(9.145, 40.489)
-    val startGeo = GeoPoint(6.0206, 37.5557) // Arba Minch Center
-    // Reference point for distance (e.g., University)
+    // Arba Minch Center
+    val startGeo = GeoPoint(6.0206, 37.5557)
     val uniGeo = GeoPoint(6.04, 37.56) 
     
-    var addressText by remember { mutableStateOf("አካባቢውን በመፈለግ ላይ...") }
-    var currentGeoPoint by remember { mutableStateOf(ethiopiaCenter) }
+    var addressText by remember { mutableStateOf("Locating...") }
+    var currentGeoPoint by remember { mutableStateOf(startGeo) }
     var estimatedPrice by remember { mutableStateOf(50.0) }
     var isMapMoving by remember { mutableStateOf(false) }
-    var mapController: org.osmdroid.api.IMapController? by remember { mutableStateOf(null) }
+    
+    // --- NEW STATE FOR NOTE ---
+    var locationNote by remember { mutableStateOf("") }
 
+    var mapController: org.osmdroid.api.IMapController? by remember { mutableStateOf(null) }
     val fusedLocationClient = remember { LocationServices.getFusedLocationProviderClient(context) }
 
     fun zoomToUser() {
@@ -99,8 +103,7 @@ fun AppUI() {
     }
 
     LaunchedEffect(Unit) {
-        if (ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) 
-            == PackageManager.PERMISSION_GRANTED) {
+        if (ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
             zoomToUser()
         } else {
             permissionLauncher.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION))
@@ -108,26 +111,22 @@ fun AppUI() {
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
-        
         AndroidView(
             factory = { ctx ->
                 MapView(ctx).apply {
                     setTileSource(TileSourceFactory.MAPNIK)
                     setMultiTouchControls(true)
                     isTilesScaledToDpi = true 
-                    controller.setZoom(6.0)
-                    controller.setCenter(ethiopiaCenter)
+                    controller.setZoom(15.0)
+                    controller.setCenter(startGeo)
                     mapController = controller
-
                     addMapListener(object : MapListener {
                         override fun onScroll(event: ScrollEvent?): Boolean { isMapMoving = true; return true }
                         override fun onZoom(event: ZoomEvent?): Boolean { isMapMoving = true; return true }
                     })
                 }
             },
-            update = { mapView ->
-                if (isMapMoving) currentGeoPoint = mapView.mapCenter as GeoPoint
-            },
+            update = { mapView -> if (isMapMoving) currentGeoPoint = mapView.mapCenter as GeoPoint },
             modifier = Modifier.fillMaxSize()
         )
 
@@ -135,14 +134,8 @@ fun AppUI() {
             if (isMapMoving) {
                 kotlinx.coroutines.delay(500)
                 isMapMoving = false 
-                
-                // Calculate Price
-                val dist = FareCalculator.calculateDistance(
-                    currentGeoPoint.latitude, currentGeoPoint.longitude,
-                    uniGeo.latitude, uniGeo.longitude
-                )
+                val dist = FareCalculator.calculateDistance(currentGeoPoint.latitude, currentGeoPoint.longitude, uniGeo.latitude, uniGeo.longitude)
                 estimatedPrice = FareCalculator.calculatePrice(dist)
-
                 scope.launch(Dispatchers.IO) {
                     try {
                         val geocoder = Geocoder(context, Locale.getDefault())
@@ -152,37 +145,23 @@ fun AppUI() {
                             val shortAddr = line.split(",").take(2).joinToString(",")
                             withContext(Dispatchers.Main) { addressText = shortAddr }
                         }
-                    } catch (e: Exception) {
-                        withContext(Dispatchers.Main) { addressText = "የማይታወቅ ቦታ" }
-                    }
+                    } catch (e: Exception) { withContext(Dispatchers.Main) { addressText = "Unknown Location" } }
                 }
             }
         }
 
-        Icon(
-            imageVector = Icons.Default.LocationOn,
-            contentDescription = "Pin",
-            modifier = Modifier.size(48.dp).align(Alignment.Center).offset(y = (-24).dp),
-            tint = Color(0xFFD32F2F)
-        )
+        Icon(imageVector = Icons.Default.LocationOn, contentDescription = "Pin", modifier = Modifier.size(48.dp).align(Alignment.Center).offset(y = (-24).dp), tint = Color(0xFFD32F2F))
 
         FloatingActionButton(
             onClick = { zoomToUser() },
             modifier = Modifier.align(Alignment.CenterEnd).padding(end = 16.dp).offset(y = 50.dp),
             containerColor = Color.White
-        ) {
-            Icon(Icons.Default.MyLocation, contentDescription = "My Location", tint = Color(0xFF1E88E5))
-        }
+        ) { Icon(Icons.Default.MyLocation, contentDescription = "My Location", tint = Color(0xFF1E88E5)) }
 
+        // BOTTOM SHEET
         Column(
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .fillMaxWidth()
-                .background(Color.White, shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp))
-                .padding(24.dp)
+            modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth().background(Color.White, shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)).padding(24.dp)
         ) {
-            Text("የመነሻ ቦታን ያረጋግጡ", style = MaterialTheme.typography.bodyMedium, color = Color.Gray)
-            Spacer(modifier = Modifier.height(8.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Default.Place, contentDescription = null, tint = Color(0xFF1E88E5))
                 Spacer(modifier = Modifier.width(12.dp))
@@ -191,13 +170,20 @@ fun AppUI() {
             
             Spacer(modifier = Modifier.height(16.dp))
             
-            Row(
+            // --- NEW: DESCRIPTION INPUT ---
+            OutlinedTextField(
+                value = locationNote,
+                onValueChange = { locationNote = it },
+                label = { Text("Specific location (e.g. Near the gate)") },
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text("ግምታዊ ዋጋ", color = Color.Gray) // Est. Fare
-                Text("$estimatedPrice ብር", style = MaterialTheme.typography.headlineSmall, color = Color(0xFF2E7D32), fontWeight = FontWeight.Bold)
+                singleLine = true
+            )
+            
+            Spacer(modifier = Modifier.height(16.dp))
+            
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                Text("Est. Fare", color = Color.Gray)
+                Text("$estimatedPrice ETB", style = MaterialTheme.typography.headlineSmall, color = Color(0xFF2E7D32), fontWeight = FontWeight.Bold)
             }
 
             Spacer(modifier = Modifier.height(24.dp))
@@ -208,18 +194,19 @@ fun AppUI() {
                     val newId = UUID.randomUUID().toString()
                     val trip = Trip(
                         tripId = newId,
-                        customerId = "Yabu",
+                        customerId = "$userName ($userPhone)",
                         pickupLocation = Location(currentGeoPoint.latitude, currentGeoPoint.longitude, addressText),
                         price = estimatedPrice,
-                        status = TripStatus.REQUESTED
+                        status = TripStatus.REQUESTED,
+                        pickupNotes = locationNote // SEND THE NOTE
                     )
                     db.child(newId).setValue(trip)
-                    Toast.makeText(context, "ጥያቄ ተልኳል: $estimatedPrice ብር", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, "Request sent!", Toast.LENGTH_SHORT).show()
                 },
                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFDD835)),
                 modifier = Modifier.fillMaxWidth().height(50.dp)
             ) {
-                Text("አረጋግጥ", color = Color.Black, fontWeight = FontWeight.Bold)
+                Text("Confirm Pickup", color = Color.Black, fontWeight = FontWeight.Bold)
             }
         }
     }

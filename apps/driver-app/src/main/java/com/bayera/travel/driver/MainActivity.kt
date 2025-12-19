@@ -11,8 +11,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
-// FIXED: Switched to a standard icon that doesn't need extra libraries
-import androidx.compose.material.icons.filled.Place 
+import androidx.compose.material.icons.filled.Place
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -69,7 +68,6 @@ fun DashboardScreen(navController: NavController) {
             override fun onDataChange(snapshot: DataSnapshot) {
                 val trips = mutableListOf<Trip>()
                 var myTrip: Trip? = null
-                
                 for (child in snapshot.children) {
                     try {
                         val trip = child.getValue(Trip::class.java)
@@ -141,6 +139,13 @@ fun CurrentJobCard(trip: Trip) {
             Text("Picking up: ${trip.customerId}", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
             Spacer(modifier = Modifier.height(8.dp))
             Text("📍 ${trip.pickupLocation.address}")
+            
+            // --- SHOW NOTE IF EXISTS ---
+            if (trip.pickupNotes.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(4.dp))
+                Text("📝 Note: ${trip.pickupNotes}", color = Color(0xFFD32F2F), fontWeight = FontWeight.Bold)
+            }
+            
             Spacer(modifier = Modifier.height(16.dp))
             
             Button(
@@ -148,19 +153,14 @@ fun CurrentJobCard(trip: Trip) {
                     val uri = "google.navigation:q=${trip.pickupLocation.lat},${trip.pickupLocation.lng}"
                     val intent = Intent(Intent.ACTION_VIEW, Uri.parse(uri))
                     intent.setPackage("com.google.android.apps.maps")
-                    try {
-                        context.startActivity(intent)
-                    } catch (e: Exception) {
-                        Toast.makeText(context, "Google Maps not found", Toast.LENGTH_SHORT).show()
-                    }
+                    try { context.startActivity(intent) } catch (e: Exception) { Toast.makeText(context, "Google Maps not found", Toast.LENGTH_SHORT).show() }
                 },
                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1976D2)),
                 modifier = Modifier.fillMaxWidth()
             ) {
-                // ICON IS NOW STANDARD 'Place' (Pin Icon)
                 Icon(Icons.Default.Place, contentDescription = null)
                 Spacer(modifier = Modifier.width(8.dp))
-                Text("NAVIGATE TO CUSTOMER")
+                Text("NAVIGATE")
             }
         }
     }
@@ -168,7 +168,6 @@ fun CurrentJobCard(trip: Trip) {
 
 @Composable
 fun TripCard(trip: Trip, driverId: String) {
-    val context = LocalContext.current
     Card(
         modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
         colors = CardDefaults.cardColors(containerColor = Color.White),
@@ -177,6 +176,12 @@ fun TripCard(trip: Trip, driverId: String) {
         Column(modifier = Modifier.padding(16.dp)) {
             Text("👤 ${trip.customerId}", fontWeight = FontWeight.Bold)
             Text("📍 ${trip.pickupLocation.address}")
+            
+            // --- SHOW NOTE IF EXISTS ---
+            if (trip.pickupNotes.isNotEmpty()) {
+                Text("📝 ${trip.pickupNotes}", color = Color.Gray)
+            }
+            
             Text("💰 ${trip.price} ETB", color = Color(0xFF2E7D32), fontWeight = FontWeight.Bold)
             Spacer(modifier = Modifier.height(12.dp))
             Button(

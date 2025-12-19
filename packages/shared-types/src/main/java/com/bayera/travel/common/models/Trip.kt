@@ -8,7 +8,9 @@ data class Trip(
     val dropoffLocation: Location = Location(),
     val status: TripStatus = TripStatus.REQUESTED,
     val price: Double = 0.0,
-    val estimatedTime: Int = 0
+    val estimatedTime: Int = 0,
+    // --- NEW FIELD ---
+    val pickupNotes: String = "" 
 )
 
 data class Location(
