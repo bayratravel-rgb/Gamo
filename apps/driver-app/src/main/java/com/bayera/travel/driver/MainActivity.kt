@@ -10,9 +10,9 @@ import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+// --- ALL ICONS IMPORTED EXPLICITLY ---
 import androidx.compose.material.icons.Icons
-// FIXED: Added missing import for Navigation Icon
-import androidx.compose.material.icons.filled.Navigation 
+import androidx.compose.material.icons.filled.Navigation
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -141,6 +141,7 @@ fun CurrentJobCard(trip: Trip) {
             Text("Picking up: ${trip.customerId}", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
             Spacer(modifier = Modifier.height(8.dp))
             Text("📍 ${trip.pickupLocation.address}")
+            
             Spacer(modifier = Modifier.height(16.dp))
             
             Button(
@@ -157,10 +158,10 @@ fun CurrentJobCard(trip: Trip) {
                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1976D2)),
                 modifier = Modifier.fillMaxWidth()
             ) {
-                // ICON IS NOW IMPORTED CORRECTLY
+                // ICON IS NOW IMPORTED
                 Icon(Icons.Default.Navigation, contentDescription = null)
                 Spacer(modifier = Modifier.width(8.dp))
-                Text("NAVIGATE TO CUSTOMER")
+                Text("NAVIGATE")
             }
         }
     }
