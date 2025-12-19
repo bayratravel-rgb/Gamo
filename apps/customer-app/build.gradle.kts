@@ -26,20 +26,17 @@ android {
 
 dependencies {
     implementation(project(":packages:shared-types"))
-    
-    // --- LINK UTILS MODULE ---
     implementation(project(":packages:utils"))
 
-    // Location & Map
+    // --- ADDED: Networking for Route Fetching ---
+    implementation("com.squareup.okhttp3:okhttp:4.12.0")
+
+    // Standard Map & Firebase stuff
     implementation("com.google.android.gms:play-services-location:21.0.1")
     implementation("org.osmdroid:osmdroid-android:6.1.16")
-
-    // Firebase
     implementation(platform("com.google.firebase:firebase-bom:32.7.0"))
     implementation("com.google.firebase:firebase-database-ktx")
     implementation("com.google.firebase:firebase-common-ktx")
-
-    // Core & UI
     implementation("androidx.core:core-ktx:1.12.0")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.6.2")
     implementation("androidx.activity:activity-compose:1.8.1")
