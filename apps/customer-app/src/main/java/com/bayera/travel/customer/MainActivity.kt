@@ -6,18 +6,14 @@ import android.location.Geocoder
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.LocationOn
-import androidx.compose.material.icons.filled.Menu
-import androidx.compose.material.icons.filled.MyLocation
-import androidx.compose.material.icons.filled.Place
-import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -41,6 +37,9 @@ import com.google.firebase.database.ValueEventListener
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import org.json.JSONObject
 import org.osmdroid.config.Configuration
 import org.osmdroid.events.MapListener
 import org.osmdroid.events.ScrollEvent
@@ -66,13 +65,14 @@ class MainActivity : ComponentActivity() {
 fun AppUI() {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    val prefs = context.getSharedPreferences("user_prefs", android.content.Context.MODE_PRIVATE)
+    val userName = prefs.getString("name", "User") ?: "User"
+    val userPhone = prefs.getString("phone", "") ?: ""
     
-    // Default Arba Minch
     val startGeo = GeoPoint(6.0206, 37.5557)
     
-    // UI State
-    var step by remember { mutableIntStateOf(0) } // 0=Pickup, 1=Dropoff, 2=Review, 3=WAITING
-    
+    // STATES
+    var step by remember { mutableIntStateOf(0) }
     var currentGeoPoint by remember { mutableStateOf(startGeo) }
     var pickupGeo by remember { mutableStateOf<GeoPoint?>(null) }
     var dropoffGeo by remember { mutableStateOf<GeoPoint?>(null) }
@@ -82,14 +82,43 @@ fun AppUI() {
     var addressText by remember { mutableStateOf("Locating...") }
     var isMapMoving by remember { mutableStateOf(false) }
     
-    // Active Trip Data
-    var activeTrip by remember { mutableStateOf<Trip?>(null) }
+    // ROUTE POINTS
+    var routePoints by remember { mutableStateOf<List<GeoPoint>>(emptyList()) }
     
-    // Map References
+    var activeTrip by remember { mutableStateOf<Trip?>(null) }
     var mapController: org.osmdroid.api.IMapController? by remember { mutableStateOf(null) }
-    var mapViewRef: MapView? by remember { mutableStateOf(null) }
 
-    // --- LISTENER FOR TRIP UPDATES (The Handshake) ---
+    // --- ROUTING FUNCTION (OSRM) ---
+    fun fetchRoute(start: GeoPoint, end: GeoPoint) {
+        scope.launch(Dispatchers.IO) {
+            try {
+                val client = OkHttpClient()
+                val url = "http://router.project-osrm.org/route/v1/driving/${start.longitude},${start.latitude};${end.longitude},${end.latitude}?overview=full&geometries=geojson"
+                val request = Request.Builder().url(url).build()
+                val response = client.newCall(request).execute()
+                
+                if (response.isSuccessful) {
+                    val json = JSONObject(response.body!!.string())
+                    val coordinates = json.getJSONArray("routes")
+                        .getJSONObject(0).getJSONObject("geometry")
+                        .getJSONArray("coordinates")
+                    
+                    val points = ArrayList<GeoPoint>()
+                    for (i in 0 until coordinates.length()) {
+                        val coord = coordinates.getJSONArray(i)
+                        points.add(GeoPoint(coord.getDouble(1), coord.getDouble(0)))
+                    }
+                    
+                    withContext(Dispatchers.Main) {
+                        routePoints = points
+                    }
+                }
+            } catch (e: Exception) {
+                // If fails, we just don't draw the line, no crash
+            }
+        }
+    }
+
     LaunchedEffect(activeTrip?.tripId) {
         if (activeTrip != null) {
             val db = FirebaseDatabase.getInstance().getReference("trips").child(activeTrip!!.tripId)
@@ -101,6 +130,27 @@ fun AppUI() {
                 override fun onCancelled(e: DatabaseError) {}
             })
         }
+    }
+
+    val fusedLocationClient = remember { LocationServices.getFusedLocationProviderClient(context) }
+    fun zoomToUser() {
+        if (ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
+            fusedLocationClient.lastLocation.addOnSuccessListener { loc ->
+                if (loc != null && step < 2) {
+                    val userPos = GeoPoint(loc.latitude, loc.longitude)
+                    mapController?.animateTo(userPos)
+                    mapController?.setZoom(18.5)
+                }
+            }
+        }
+    }
+    
+    val permissionLauncher = rememberLauncherForActivityResult(contract = ActivityResultContracts.RequestMultiplePermissions()) { 
+        if (it[Manifest.permission.ACCESS_FINE_LOCATION] == true) zoomToUser() 
+    }
+    LaunchedEffect(Unit) {
+        if (ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) zoomToUser()
+        else permissionLauncher.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION))
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
@@ -116,8 +166,6 @@ fun AppUI() {
                     controller.setZoom(16.0)
                     controller.setCenter(startGeo)
                     mapController = controller
-                    mapViewRef = this
-
                     addMapListener(object : MapListener {
                         override fun onScroll(event: ScrollEvent?): Boolean { isMapMoving = true; return true }
                         override fun onZoom(event: ZoomEvent?): Boolean { isMapMoving = true; return true }
@@ -127,14 +175,14 @@ fun AppUI() {
             update = { mapView ->
                 if (isMapMoving) currentGeoPoint = mapView.mapCenter as GeoPoint
                 
-                // DRAW OVERLAYS
                 mapView.overlays.clear()
 
                 if (step >= 1 || step == 3) {
                     val m1 = Marker(mapView)
                     m1.position = pickupGeo
                     m1.title = "Pickup"
-                    m1.icon = ContextCompat.getDrawable(context, org.osmdroid.library.R.drawable.marker_default) // Standard Pin
+                    // Use default marker or custom if available
+                    m1.icon = ContextCompat.getDrawable(context, org.osmdroid.library.R.drawable.marker_default)
                     mapView.overlays.add(m1)
                 }
 
@@ -144,22 +192,22 @@ fun AppUI() {
                     m2.title = "Dropoff"
                     mapView.overlays.add(m2)
                     
-                    // Simple Line (Straight for now, Road Routing requires API)
-                    val line = Polyline()
-                    line.addPoint(pickupGeo)
-                    line.addPoint(dropoffGeo)
-                    line.color = android.graphics.Color.BLUE
-                    line.width = 12f
-                    mapView.overlays.add(line)
+                    // --- DRAW REAL ROAD LINE ---
+                    if (routePoints.isNotEmpty()) {
+                        val line = Polyline()
+                        line.setPoints(routePoints)
+                        line.color = android.graphics.Color.BLUE
+                        line.width = 15f
+                        mapView.overlays.add(line)
+                    }
                 }
                 mapView.invalidate()
             },
             modifier = Modifier.fillMaxSize()
         )
 
-        // Address Fetcher
         LaunchedEffect(isMapMoving) {
-            if (isMapMoving && step < 2) { // Only fetch address during selection
+            if (isMapMoving && step < 2) {
                 kotlinx.coroutines.delay(600)
                 isMapMoving = false 
                 scope.launch(Dispatchers.IO) {
@@ -171,50 +219,59 @@ fun AppUI() {
                             val shortAddr = line.split(",").take(2).joinToString(",")
                             withContext(Dispatchers.Main) { addressText = shortAddr }
                         }
-                    } catch (e: Exception) {}
+                    } catch (e: Exception) { withContext(Dispatchers.Main) { addressText = "Unknown" } }
                 }
             }
         }
 
-        // --- SELECTION PIN (Only steps 0 and 1) ---
         if (step < 2) {
             Icon(
                 imageVector = if (step == 0) Icons.Default.Home else Icons.Default.LocationOn,
                 contentDescription = "Pin",
-                modifier = Modifier.size(40.dp).align(Alignment.Center).offset(y = (-20).dp), // Smaller Icon
+                modifier = Modifier.size(40.dp).align(Alignment.Center).offset(y = (-20).dp),
                 tint = if (step == 0) Color(0xFF2E7D32) else Color(0xFFD32F2F)
             )
         }
 
-        // --- BOTTOM SHEET UI ---
+        FloatingActionButton(
+            onClick = { zoomToUser() },
+            modifier = Modifier.align(Alignment.CenterEnd).padding(end = 16.dp).offset(y = 50.dp),
+            containerColor = Color.White
+        ) { Icon(Icons.Default.MyLocation, contentDescription = "My Location", tint = Color(0xFF1E88E5)) }
+        
+        if (step > 0 && step < 3) {
+             FloatingActionButton(
+                onClick = { 
+                    step-- 
+                    routePoints = emptyList() // Clear line if going back
+                },
+                modifier = Modifier.align(Alignment.TopStart).padding(top = 40.dp, start = 16.dp),
+                containerColor = Color.White
+            ) { Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = Color.Black) }
+        }
+
         Column(
             modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth().background(Color.White, shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)).padding(24.dp)
         ) {
             if (step == 3) {
-                // --- STATE 3: WAITING FOR DRIVER ---
+                // WAITING MODE
                 if (activeTrip?.status == TripStatus.ACCEPTED) {
                     Text("✅ Driver Found!", style = MaterialTheme.typography.headlineSmall, color = Color(0xFF2E7D32), fontWeight = FontWeight.Bold)
-                    Spacer(modifier = Modifier.height(8.dp))
                     Text("Driver: ${activeTrip?.driverId}", style = MaterialTheme.typography.bodyLarge)
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text("Your ride is on the way.", color = Color.Gray)
                 } else {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         CircularProgressIndicator(color = Color(0xFF1E88E5), modifier = Modifier.size(24.dp))
                         Spacer(modifier = Modifier.width(16.dp))
-                        Column {
-                            Text("Finding you a driver...", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                            Text("Please wait.", color = Color.Gray, style = MaterialTheme.typography.bodySmall)
-                        }
+                        Text("Finding you a driver...", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                     }
                     Spacer(modifier = Modifier.height(16.dp))
                     Button(
                         onClick = { 
-                            // Cancel Logic
                             step = 0 
                             activeTrip = null
                             pickupGeo = null
                             dropoffGeo = null
+                            routePoints = emptyList()
                         },
                         colors = ButtonDefaults.buttonColors(containerColor = Color.LightGray),
                         modifier = Modifier.fillMaxWidth()
@@ -222,8 +279,7 @@ fun AppUI() {
                 }
                 
             } else if (step == 0) {
-                // PICKUP
-                Text("Confirm Pickup Point", style = MaterialTheme.typography.titleMedium, color = Color.Gray)
+                Text("Start Trip From?", style = MaterialTheme.typography.titleMedium, color = Color.Gray)
                 Text(addressText, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, maxLines = 1)
                 Spacer(modifier = Modifier.height(16.dp))
                 Button(
@@ -231,14 +287,12 @@ fun AppUI() {
                         pickupGeo = currentGeoPoint
                         pickupAddr = addressText
                         step = 1 
-                        Toast.makeText(context, "Now drag to destination", Toast.LENGTH_SHORT).show()
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2E7D32)),
                     modifier = Modifier.fillMaxWidth().height(50.dp)
-                ) { Text("Set Pickup") }
+                ) { Text("Set Pickup", color = Color.White) }
                 
             } else if (step == 1) {
-                // DROPOFF
                 Text("Where to?", style = MaterialTheme.typography.titleMedium, color = Color.Gray)
                 Text(addressText, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, maxLines = 1)
                 Spacer(modifier = Modifier.height(16.dp))
@@ -248,34 +302,40 @@ fun AppUI() {
                         dropoffAddr = addressText
                         val dist = FareCalculator.calculateDistance(pickupGeo!!.latitude, pickupGeo!!.longitude, dropoffGeo!!.latitude, dropoffGeo!!.longitude)
                         estimatedPrice = FareCalculator.calculatePrice(dist)
-                        step = 2 
                         
-                        // Zoom out to show whole route
+                        // FETCH ROAD ROUTE HERE
+                        fetchRoute(pickupGeo!!, dropoffGeo!!)
+                        
+                        step = 2 
                         mapController?.setZoom(13.0)
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFD32F2F)),
                     modifier = Modifier.fillMaxWidth().height(50.dp)
-                ) { Text("Set Destination") }
-
+                ) { Text("Set Destination", color = Color.White) }
+                
             } else if (step == 2) {
-                // REVIEW
-                Text("Total Fare: $estimatedPrice ETB", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold, color = Color(0xFF2E7D32))
-                Text("From: $pickupAddr", style = MaterialTheme.typography.bodySmall)
-                Text("To: $dropoffAddr", style = MaterialTheme.typography.bodySmall)
+                Text("Trip Summary", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                Text("🟢 $pickupAddr")
+                Text("🔴 $dropoffAddr")
+                Spacer(modifier = Modifier.height(16.dp))
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Text("Total Price", color = Color.Gray)
+                    Text("$estimatedPrice ETB", style = MaterialTheme.typography.headlineMedium, color = Color(0xFF2E7D32), fontWeight = FontWeight.Bold)
+                }
                 Spacer(modifier = Modifier.height(24.dp))
                 Button(
                     onClick = { 
                         val db = FirebaseDatabase.getInstance().getReference("trips")
                         val newId = UUID.randomUUID().toString()
                         val trip = Trip(
-                            tripId = newId, customerId = "Yabu",
+                            tripId = newId, customerId = "$userName ($userPhone)",
                             pickupLocation = Location(pickupGeo!!.latitude, pickupGeo!!.longitude, pickupAddr),
                             dropoffLocation = Location(dropoffGeo!!.latitude, dropoffGeo!!.longitude, dropoffAddr),
                             price = estimatedPrice, status = TripStatus.REQUESTED
                         )
                         db.child(newId).setValue(trip)
                         activeTrip = trip
-                        step = 3 // ENTER WAITING MODE
+                        step = 3 
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFDD835)),
                     modifier = Modifier.fillMaxWidth().height(50.dp)
