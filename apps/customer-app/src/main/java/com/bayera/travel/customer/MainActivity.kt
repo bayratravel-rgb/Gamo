@@ -18,29 +18,25 @@ import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material.icons.filled.Place
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
-import androidx.navigation.compose.NavHost
-import androidx.navigation.compose.composable
-import androidx.navigation.compose.rememberNavController
 import com.bayera.travel.common.models.Trip
 import com.bayera.travel.common.models.Location
 import com.bayera.travel.common.models.TripStatus
 import com.bayera.travel.utils.FareCalculator
 import com.google.android.gms.location.LocationServices
 import com.google.firebase.FirebaseApp
-import com.google.firebase.database.DataSnapshot
-import com.google.firebase.database.DatabaseError
 import com.google.firebase.database.FirebaseDatabase
-import com.google.firebase.database.ValueEventListener
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -51,6 +47,8 @@ import org.osmdroid.events.ZoomEvent
 import org.osmdroid.tileprovider.tilesource.TileSourceFactory
 import org.osmdroid.util.GeoPoint
 import org.osmdroid.views.MapView
+import org.osmdroid.views.overlay.Marker
+import org.osmdroid.views.overlay.Polyline
 import java.util.Locale
 import java.util.UUID
 
@@ -61,47 +59,40 @@ class MainActivity : ComponentActivity() {
         Configuration.getInstance().userAgentValue = packageName
 
         setContent {
-            val navController = rememberNavController()
-            val context = LocalContext.current
-            val prefs = context.getSharedPreferences("user_prefs", android.content.Context.MODE_PRIVATE)
-            val startScreen = if (prefs.getString("name", "").isNullOrEmpty()) "login" else "home"
-
-            NavHost(navController = navController, startDestination = startScreen) {
-                composable("login") { LoginScreen(navController) }
-                composable("home") { HomeScreen() }
-            }
+            AppUI()
         }
     }
 }
 
 @Composable
-fun HomeScreen() {
+fun AppUI() {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val prefs = context.getSharedPreferences("user_prefs", android.content.Context.MODE_PRIVATE)
     val userName = prefs.getString("name", "User") ?: "User"
     val userPhone = prefs.getString("phone", "") ?: ""
-
-    // STATE: 0=Pickup, 1=Dropoff, 2=Confirm
+    
+    // Default Arba Minch
+    val startGeo = GeoPoint(6.0206, 37.5557)
+    
+    // STATES: 0=Pick Pickup, 1=Pick Dropoff, 2=Review/Book
     var step by remember { mutableIntStateOf(0) }
     
+    var currentGeoPoint by remember { mutableStateOf(startGeo) }
     var pickupGeo by remember { mutableStateOf<GeoPoint?>(null) }
     var dropoffGeo by remember { mutableStateOf<GeoPoint?>(null) }
     
-    var pickupAddr by remember { mutableStateOf("") }
-    var dropoffAddr by remember { mutableStateOf("") }
-    var locationNote by remember { mutableStateOf("") }
-    
-    var currentCenter by remember { mutableStateOf(GeoPoint(6.0206, 37.5557)) }
-    var isMapMoving by remember { mutableStateOf(false) }
     var addressText by remember { mutableStateOf("Locating...") }
-    var estimatedPrice by remember { mutableStateOf(0.0) }
+    var pickupAddress by remember { mutableStateOf("") }
+    var dropoffAddress by remember { mutableStateOf("") }
     
-    // Handshake
-    var currentTrip by remember { mutableStateOf<Trip?>(null) }
-
-    // Map Controller
+    var estimatedPrice by remember { mutableStateOf(0.0) }
+    var isMapMoving by remember { mutableStateOf(false) }
+    
+    // Map Control
     var mapController: org.osmdroid.api.IMapController? by remember { mutableStateOf(null) }
+    var mapViewRef: MapView? by remember { mutableStateOf(null) }
+    
     val fusedLocationClient = remember { LocationServices.getFusedLocationProviderClient(context) }
 
     fun zoomToUser() {
@@ -116,17 +107,17 @@ fun HomeScreen() {
         } catch (e: SecurityException) {}
     }
 
-    // Listener for Driver
-    LaunchedEffect(currentTrip?.tripId) {
-        if (currentTrip != null) {
-            val db = FirebaseDatabase.getInstance().getReference("trips").child(currentTrip!!.tripId)
-            db.addValueEventListener(object : ValueEventListener {
-                override fun onDataChange(snapshot: DataSnapshot) {
-                    val updatedTrip = snapshot.getValue(Trip::class.java)
-                    if (updatedTrip != null) currentTrip = updatedTrip
-                }
-                override fun onCancelled(e: DatabaseError) {}
-            })
+    val permissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestMultiplePermissions()
+    ) { permissions ->
+        if (permissions[Manifest.permission.ACCESS_FINE_LOCATION] == true) zoomToUser()
+    }
+
+    LaunchedEffect(Unit) {
+        if (ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
+            zoomToUser()
+        } else {
+            permissionLauncher.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION))
         }
     }
 
@@ -141,8 +132,9 @@ fun HomeScreen() {
                     minZoomLevel = 6.0
                     maxZoomLevel = 22.0
                     controller.setZoom(15.0)
-                    controller.setCenter(currentCenter)
+                    controller.setCenter(startGeo)
                     mapController = controller
+                    mapViewRef = this
 
                     addMapListener(object : MapListener {
                         override fun onScroll(event: ScrollEvent?): Boolean { isMapMoving = true; return true }
@@ -151,7 +143,35 @@ fun HomeScreen() {
                 }
             },
             update = { mapView ->
-                if (isMapMoving) currentCenter = mapView.mapCenter as GeoPoint
+                if (isMapMoving) currentGeoPoint = mapView.mapCenter as GeoPoint
+                
+                // DRAW ROUTE LINE if in Step 2
+                if (step == 2 && pickupGeo != null && dropoffGeo != null) {
+                    mapView.overlays.clear()
+                    
+                    // Pickup Marker (Green)
+                    val m1 = Marker(mapView)
+                    m1.position = pickupGeo
+                    m1.icon = ContextCompat.getDrawable(context, org.osmdroid.library.R.drawable.marker_default) // Using default library marker for safety
+                    m1.title = "Pickup"
+                    mapView.overlays.add(m1)
+                    
+                    // Dropoff Marker (Red)
+                    val m2 = Marker(mapView)
+                    m2.position = dropoffGeo
+                    m2.title = "Dropoff"
+                    mapView.overlays.add(m2)
+                    
+                    // Line
+                    val line = Polyline()
+                    line.addPoint(pickupGeo)
+                    line.addPoint(dropoffGeo)
+                    line.color = android.graphics.Color.BLUE
+                    line.width = 10f
+                    mapView.overlays.add(line)
+                    
+                    mapView.invalidate() // Refresh map
+                }
             },
             modifier = Modifier.fillMaxSize()
         )
@@ -164,7 +184,7 @@ fun HomeScreen() {
                 scope.launch(Dispatchers.IO) {
                     try {
                         val geocoder = Geocoder(context, Locale.getDefault())
-                        val addresses = geocoder.getFromLocation(currentCenter.latitude, currentCenter.longitude, 1)
+                        val addresses = geocoder.getFromLocation(currentGeoPoint.latitude, currentGeoPoint.longitude, 1)
                         if (!addresses.isNullOrEmpty()) {
                             val line = addresses[0].getAddressLine(0)
                             val shortAddr = line.split(",").take(2).joinToString(",")
@@ -175,103 +195,116 @@ fun HomeScreen() {
             }
         }
 
-        // Center Pin (Changes Color)
-        Icon(
-            imageVector = Icons.Default.LocationOn,
-            contentDescription = "Pin",
-            modifier = Modifier.size(50.dp).align(Alignment.Center).offset(y = (-25).dp),
-            tint = if (step == 0) Color(0xFF2E7D32) else Color(0xFFD32F2F) // Green for Pickup, Red for Dropoff
-        )
+        // --- UI OVERLAYS ---
 
-        // Bottom Sheet
+        // 1. Center Pin (Only show during selection steps 0 and 1)
+        if (step < 2) {
+            Icon(
+                imageVector = Icons.Default.LocationOn,
+                contentDescription = "Pin",
+                modifier = Modifier.size(50.dp).align(Alignment.Center).offset(y = (-25).dp),
+                tint = if (step == 0) Color(0xFF2E7D32) else Color(0xFFD32F2F) // Green for Pickup, Red for Dropoff
+            )
+        }
+
+        // 2. GPS Button
+        FloatingActionButton(
+            onClick = { zoomToUser() },
+            modifier = Modifier.align(Alignment.CenterEnd).padding(end = 16.dp).offset(y = 50.dp),
+            containerColor = Color.White
+        ) { Icon(Icons.Default.MyLocation, contentDescription = "My Location", tint = Color(0xFF1E88E5)) }
+
+        // 3. TOP BAR (Back Button)
+        if (step > 0) {
+             FloatingActionButton(
+                onClick = { 
+                    step-- // Go back a step
+                    mapViewRef?.overlays?.clear() // Clear lines
+                    mapViewRef?.invalidate()
+                },
+                modifier = Modifier.align(Alignment.TopStart).padding(top = 40.dp, start = 16.dp),
+                containerColor = Color.White
+            ) { Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = Color.Black) }
+        }
+
+        // 4. BOTTOM SHEET
         Column(
             modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth().background(Color.White, shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)).padding(24.dp)
         ) {
-            if (currentTrip != null) {
-                // TRIP IN PROGRESS
-                if (currentTrip!!.status == TripStatus.ACCEPTED) {
-                    Text("✅ Driver Found!", style = MaterialTheme.typography.headlineSmall, color = Color(0xFF2E7D32), fontWeight = FontWeight.Bold)
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text("Driver: ${currentTrip!!.driverId}", style = MaterialTheme.typography.bodyLarge)
-                } else {
-                    CircularProgressIndicator(color = Color(0xFF1E88E5))
-                    Text("Finding driver...", style = MaterialTheme.typography.bodyLarge)
-                }
-            } else {
-                // BOOKING FLOW
-                Text(if (step == 0) "Set Pickup Point" else "Set Destination", style = MaterialTheme.typography.titleMedium, color = Color.Gray)
-                Spacer(modifier = Modifier.height(8.dp))
-                
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.Place, contentDescription = null, tint = Color(0xFF1E88E5))
-                    Spacer(modifier = Modifier.width(12.dp))
-                    Text(text = addressText, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, maxLines = 1)
-                }
-                
+            if (step == 0) {
+                // STEP 0: PICKUP
+                Text("Start Trip From?", style = MaterialTheme.typography.titleMedium, color = Color.Gray)
+                Text(addressText, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, maxLines = 1)
                 Spacer(modifier = Modifier.height(16.dp))
-
-                if (step == 0) {
-                    // STEP 1: CONFIRM PICKUP
-                    OutlinedTextField(
-                        value = locationNote,
-                        onValueChange = { locationNote = it },
-                        label = { Text("Note (e.g. Near gate)") },
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true
-                    )
-                    Spacer(modifier = Modifier.height(16.dp))
-                    
-                    Button(
-                        onClick = { 
-                            pickupGeo = currentCenter
-                            pickupAddr = addressText
-                            step = 1 // Move to Dropoff
-                            // Zoom out slightly to help find destination
-                            mapController?.setZoom(14.0)
-                        },
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2E7D32)), // Green
-                        modifier = Modifier.fillMaxWidth().height(50.dp)
-                    ) { Text("Confirm Pickup", color = Color.White) }
-                } else {
-                    // STEP 2: CONFIRM DROPOFF & BOOK
-                    // Calculate Price Preview
-                    val dist = FareCalculator.calculateDistance(
-                        pickupGeo!!.latitude, pickupGeo!!.longitude,
-                        currentCenter.latitude, currentCenter.longitude
-                    )
-                    val price = FareCalculator.calculatePrice(dist)
-                    
-                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                        Text("Est. Fare", color = Color.Gray)
-                        Text("$price ETB", style = MaterialTheme.typography.headlineSmall, color = Color(0xFF2E7D32), fontWeight = FontWeight.Bold)
-                    }
-                    Spacer(modifier = Modifier.height(16.dp))
-                    
-                    Row {
-                        OutlinedButton(onClick = { step = 0 }, modifier = Modifier.weight(1f)) { Text("Back") }
-                        Spacer(modifier = Modifier.width(16.dp))
-                        Button(
-                            onClick = { 
-                                val db = FirebaseDatabase.getInstance().getReference("trips")
-                                val newId = UUID.randomUUID().toString()
-                                val trip = Trip(
-                                    tripId = newId,
-                                    customerId = "$userName ($userPhone)",
-                                    pickupLocation = Location(pickupGeo!!.latitude, pickupGeo!!.longitude, pickupAddr),
-                                    dropoffLocation = Location(currentCenter.latitude, currentCenter.longitude, addressText),
-                                    price = price,
-                                    status = TripStatus.REQUESTED,
-                                    pickupNotes = locationNote
-                                )
-                                db.child(newId).setValue(trip)
-                                currentTrip = trip
-                                step = 0 // Reset UI state
-                            },
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFDD835)),
-                            modifier = Modifier.weight(1f)
-                        ) { Text("Book Ride") }
-                    }
+                Button(
+                    onClick = { 
+                        pickupGeo = currentGeoPoint
+                        pickupAddress = addressText
+                        step = 1 // Go to Dropoff
+                        Toast.makeText(context, "Now select Destination", Toast.LENGTH_SHORT).show()
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2E7D32)),
+                    modifier = Modifier.fillMaxWidth().height(50.dp)
+                ) { Text("Set Pickup", color = Color.White) }
+                
+            } else if (step == 1) {
+                // STEP 1: DROPOFF
+                Text("Where are you going?", style = MaterialTheme.typography.titleMedium, color = Color.Gray)
+                Text(addressText, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, maxLines = 1)
+                Spacer(modifier = Modifier.height(16.dp))
+                Button(
+                    onClick = { 
+                        dropoffGeo = currentGeoPoint
+                        dropoffAddress = addressText
+                        
+                        // Calculate Price
+                        val dist = FareCalculator.calculateDistance(
+                            pickupGeo!!.latitude, pickupGeo!!.longitude,
+                            dropoffGeo!!.latitude, dropoffGeo!!.longitude
+                        )
+                        estimatedPrice = FareCalculator.calculatePrice(dist)
+                        
+                        step = 2 // Go to Review
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFD32F2F)),
+                    modifier = Modifier.fillMaxWidth().height(50.dp)
+                ) { Text("Set Destination", color = Color.White) }
+                
+            } else if (step == 2) {
+                // STEP 2: REVIEW & BOOK
+                Text("Trip Summary", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                Spacer(modifier = Modifier.height(8.dp))
+                Text("🟢 From: $pickupAddress")
+                Text("🔴 To: $dropoffAddress")
+                Spacer(modifier = Modifier.height(16.dp))
+                
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                    Text("Total Price", color = Color.Gray)
+                    Text("$estimatedPrice ETB", style = MaterialTheme.typography.headlineMedium, color = Color(0xFF2E7D32), fontWeight = FontWeight.Bold)
                 }
+                
+                Spacer(modifier = Modifier.height(24.dp))
+                
+                Button(
+                    onClick = { 
+                        val db = FirebaseDatabase.getInstance().getReference("trips")
+                        val newId = UUID.randomUUID().toString()
+                        val trip = Trip(
+                            tripId = newId,
+                            customerId = "$userName ($userPhone)",
+                            pickupLocation = Location(pickupGeo!!.latitude, pickupGeo!!.longitude, pickupAddress),
+                            dropoffLocation = Location(dropoffGeo!!.latitude, dropoffGeo!!.longitude, dropoffAddress),
+                            price = estimatedPrice,
+                            status = TripStatus.REQUESTED
+                        )
+                        db.child(newId).setValue(trip)
+                        Toast.makeText(context, "Driver Requested!", Toast.LENGTH_LONG).show()
+                        // Reset
+                        step = 0
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFDD835)),
+                    modifier = Modifier.fillMaxWidth().height(50.dp)
+                ) { Text("BOOK RIDE NOW", color = Color.Black, fontWeight = FontWeight.Bold) }
             }
         }
     }
