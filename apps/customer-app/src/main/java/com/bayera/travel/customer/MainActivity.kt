@@ -75,22 +75,20 @@ fun AppUI() {
     val startGeo = GeoPoint(6.0206, 37.5557)
     
     var step by remember { mutableIntStateOf(0) }
-    
-    // We remove 'currentGeoPoint' state for logic, and use the MapView directly
+    var currentGeoPoint by remember { mutableStateOf(startGeo) }
     var pickupGeo by remember { mutableStateOf<GeoPoint?>(null) }
     var dropoffGeo by remember { mutableStateOf<GeoPoint?>(null) }
-    
-    var addressText by remember { mutableStateOf("Locating...") }
-    var pickupAddress by remember { mutableStateOf("") }
-    var dropoffAddress by remember { mutableStateOf("") }
-    
+    var pickupAddr by remember { mutableStateOf("") }
+    var dropoffAddr by remember { mutableStateOf("") }
     var estimatedPrice by remember { mutableStateOf(0.0) }
-    var activeTrip by remember { mutableStateOf<Trip?>(null) }
-    var routePoints by remember { mutableStateOf<List<GeoPoint>>(emptyList()) }
+    var addressText by remember { mutableStateOf("Locating...") }
+    var isMapMoving by remember { mutableStateOf(false) }
     
-    // CRITICAL: Reference to the actual Map View
-    var mapViewRef by remember { mutableStateOf<MapView?>(null) }
+    var routePoints by remember { mutableStateOf<List<GeoPoint>>(emptyList()) }
+    var activeTrip by remember { mutableStateOf<Trip?>(null) }
+    
     var mapController: org.osmdroid.api.IMapController? by remember { mutableStateOf(null) }
+    var mapViewRef: MapView? by remember { mutableStateOf(null) }
 
     val fusedLocationClient = remember { LocationServices.getFusedLocationProviderClient(context) }
 
@@ -114,14 +112,28 @@ fun AppUI() {
         }
     }
 
-    LaunchedEffect(activeTrip?.tripId) {
-        if (activeTrip != null) {
-            val db = FirebaseDatabase.getInstance().getReference("trips").child(activeTrip!!.tripId)
-            // Listen for status changes
+    // --- REVERSE GEOCODING HELPER ---
+    fun updateAddress(point: GeoPoint) {
+        scope.launch(Dispatchers.IO) {
+            try {
+                val geocoder = Geocoder(context, Locale.getDefault())
+                val addresses = geocoder.getFromLocation(point.latitude, point.longitude, 1)
+                if (!addresses.isNullOrEmpty()) {
+                    val line = addresses[0].getAddressLine(0)
+                    val shortAddr = line.split(",").take(2).joinToString(",")
+                    withContext(Dispatchers.Main) { addressText = shortAddr }
+                }
+            } catch (e: Exception) { withContext(Dispatchers.Main) { addressText = "Unknown" } }
         }
     }
 
-    // GPS Logic
+    LaunchedEffect(activeTrip?.tripId) {
+        if (activeTrip != null) {
+            val db = FirebaseDatabase.getInstance().getReference("trips").child(activeTrip!!.tripId)
+            // Listener logic here (simplified for fix)
+        }
+    }
+
     fun zoomToUser() {
         if (ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
             fusedLocationClient.lastLocation.addOnSuccessListener { loc ->
@@ -132,6 +144,14 @@ fun AppUI() {
                 }
             }
         }
+    }
+    
+    val permissionLauncher = rememberLauncherForActivityResult(contract = ActivityResultContracts.RequestMultiplePermissions()) { 
+        if (it[Manifest.permission.ACCESS_FINE_LOCATION] == true) zoomToUser() 
+    }
+    LaunchedEffect(Unit) {
+        if (ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) zoomToUser()
+        else permissionLauncher.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION))
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
@@ -151,13 +171,24 @@ fun AppUI() {
                     mapViewRef = this
 
                     addMapListener(object : MapListener {
-                        override fun onScroll(event: ScrollEvent?): Boolean { updateAddress(); return true }
-                        override fun onZoom(event: ZoomEvent?): Boolean { updateAddress(); return true }
+                        override fun onScroll(event: ScrollEvent?): Boolean { 
+                            isMapMoving = true
+                            return true 
+                        }
+                        override fun onZoom(event: ZoomEvent?): Boolean { 
+                            isMapMoving = true
+                            return true 
+                        }
                     })
                 }
             },
             update = { mapView ->
-                // Draw Overlays
+                if (isMapMoving) {
+                    currentGeoPoint = mapView.mapCenter as GeoPoint
+                    // Call the helper safely
+                    // Note: We delay actual address fetch to avoid spamming
+                }
+                
                 mapView.overlays.clear()
                 if (step >= 1 || step == 3) {
                     val m1 = Marker(mapView)
@@ -185,28 +216,20 @@ fun AppUI() {
             modifier = Modifier.fillMaxSize()
         )
 
-        // Helper to update address text based on CURRENT map center
-        fun updateAddress() {
-             scope.launch(Dispatchers.IO) {
-                try {
-                    // Grab center directly from map reference
-                    val center = mapViewRef?.mapCenter as? GeoPoint ?: return@launch
-                    val geocoder = Geocoder(context, Locale.getDefault())
-                    val addresses = geocoder.getFromLocation(center.latitude, center.longitude, 1)
-                    if (!addresses.isNullOrEmpty()) {
-                        val line = addresses[0].getAddressLine(0)
-                        val shortAddr = line.split(",").take(2).joinToString(",")
-                        withContext(Dispatchers.Main) { addressText = shortAddr }
-                    }
-                } catch (e: Exception) { withContext(Dispatchers.Main) { addressText = "Loading..." } }
+        // Debounce Address Fetch
+        LaunchedEffect(isMapMoving) {
+            if (isMapMoving) {
+                kotlinx.coroutines.delay(800)
+                isMapMoving = false 
+                // FETCH ADDRESS NOW
+                updateAddress(currentGeoPoint)
             }
         }
 
-        // Center Pin (Target) - Hide when booking confirmed
         if (step < 2) {
             Icon(
                 imageVector = if (step == 0) Icons.Default.Home else Icons.Default.LocationOn,
-                contentDescription = "Target",
+                contentDescription = "Pin",
                 modifier = Modifier.size(40.dp).align(Alignment.Center).offset(y = (-20).dp),
                 tint = if (step == 0) Color(0xFF2E7D32) else Color(0xFFD32F2F)
             )
@@ -230,22 +253,19 @@ fun AppUI() {
             modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth().background(Color.White, shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)).padding(24.dp)
         ) {
             if (step == 3) {
-                // Waiting Mode
-                 Text("Request Sent", style = MaterialTheme.typography.headlineSmall, color = Color(0xFF2E7D32), fontWeight = FontWeight.Bold)
-                 Button(onClick = { step = 0; activeTrip = null; pickupGeo = null; dropoffGeo = null }, 
+                Text("Request Sent", style = MaterialTheme.typography.headlineSmall, color = Color(0xFF2E7D32), fontWeight = FontWeight.Bold)
+                Button(onClick = { step = 0; activeTrip = null; pickupGeo = null; dropoffGeo = null }, 
                     colors = ButtonDefaults.buttonColors(containerColor = Color.LightGray), modifier = Modifier.fillMaxWidth()) { Text("Reset", color = Color.Black) }
-            
             } else if (step == 0) {
-                // PICKUP
                 Text("Start Trip From?", style = MaterialTheme.typography.titleMedium, color = Color.Gray)
                 Text(addressText, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, maxLines = 1)
                 Spacer(modifier = Modifier.height(16.dp))
                 Button(
                     onClick = { 
-                        // FORCE GRAB CURRENT CENTER
+                        // FORCE CAPTURE
                         val center = mapViewRef?.mapCenter as? GeoPoint
                         if (center != null) {
-                            pickupGeo = center // Explicitly save WHERE THE MAP IS NOW
+                            pickupGeo = center 
                             pickupAddr = addressText
                             step = 1 
                         }
@@ -253,20 +273,16 @@ fun AppUI() {
                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2E7D32)),
                     modifier = Modifier.fillMaxWidth().height(50.dp)
                 ) { Text("Set Pickup Here") }
-                
             } else if (step == 1) {
-                // DROPOFF
                 Text("Where to?", style = MaterialTheme.typography.titleMedium, color = Color.Gray)
                 Text(addressText, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, maxLines = 1)
                 Spacer(modifier = Modifier.height(16.dp))
                 Button(
                     onClick = { 
-                        // FORCE GRAB CURRENT CENTER
                         val center = mapViewRef?.mapCenter as? GeoPoint
                         if (center != null) {
-                            dropoffGeo = center // Explicitly save WHERE THE MAP IS NOW
+                            dropoffGeo = center
                             dropoffAddr = addressText
-                            
                             val dist = FareCalculator.calculateDistance(pickupGeo!!.latitude, pickupGeo!!.longitude, dropoffGeo!!.latitude, dropoffGeo!!.longitude)
                             estimatedPrice = FareCalculator.calculatePrice(dist)
                             fetchRoute(pickupGeo!!, dropoffGeo!!)
@@ -276,9 +292,7 @@ fun AppUI() {
                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFD32F2F)),
                     modifier = Modifier.fillMaxWidth().height(50.dp)
                 ) { Text("Set Destination Here") }
-                
             } else if (step == 2) {
-                // REVIEW
                 Text("Trip Summary", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
                 Text("🟢 From: $pickupAddr")
                 Text("🔴 To: $dropoffAddr")
