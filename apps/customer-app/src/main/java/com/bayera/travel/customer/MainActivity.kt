@@ -1,6 +1,7 @@
 package com.bayera.travel.customer
 
 import android.Manifest
+import android.content.Context
 import android.content.pm.PackageManager
 import android.location.Geocoder
 import android.os.Bundle
@@ -10,7 +11,6 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -50,7 +50,9 @@ import org.osmdroid.events.MapListener
 import org.osmdroid.events.ScrollEvent
 import org.osmdroid.events.ZoomEvent
 import org.osmdroid.tileprovider.tilesource.TileSourceFactory
+import org.osmdroid.tileprovider.tilesource.XYTileSource
 import org.osmdroid.util.GeoPoint
+import org.osmdroid.util.MapTileIndex
 import org.osmdroid.views.MapView
 import org.osmdroid.views.overlay.Marker
 import org.osmdroid.views.overlay.Polyline
@@ -66,13 +68,14 @@ class MainActivity : ComponentActivity() {
         setContent {
             val navController = rememberNavController()
             val context = LocalContext.current
-            val prefs = context.getSharedPreferences("user_prefs", android.content.Context.MODE_PRIVATE)
+            val prefs = context.getSharedPreferences("user_prefs", Context.MODE_PRIVATE)
             val startScreen = if (prefs.getString("name", "").isNullOrEmpty()) "login" else "home"
 
             NavHost(navController = navController, startDestination = startScreen) {
                 composable("login") { LoginScreen(navController) }
                 composable("home") { HomeScreen(navController) }
                 composable("profile") { ProfileScreen(navController) }
+                composable("settings") { SettingsScreen(navController) }
             }
         }
     }
@@ -83,13 +86,14 @@ class MainActivity : ComponentActivity() {
 fun HomeScreen(navController: NavController) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    val prefs = context.getSharedPreferences("user_prefs", android.content.Context.MODE_PRIVATE)
+    val prefs = context.getSharedPreferences("user_prefs", Context.MODE_PRIVATE)
     val userName = prefs.getString("name", "User") ?: "User"
     val userPhone = prefs.getString("phone", "") ?: ""
     
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val startGeo = GeoPoint(6.0206, 37.5557)
     
+    // UI State
     var step by remember { mutableIntStateOf(0) }
     var currentGeoPoint by remember { mutableStateOf(startGeo) }
     var pickupGeo by remember { mutableStateOf<GeoPoint?>(null) }
@@ -101,9 +105,21 @@ fun HomeScreen(navController: NavController) {
     var isMapMoving by remember { mutableStateOf(false) }
     var routePoints by remember { mutableStateOf<List<GeoPoint>>(emptyList()) }
     var activeTrip by remember { mutableStateOf<Trip?>(null) }
+    
     var mapController: org.osmdroid.api.IMapController? by remember { mutableStateOf(null) }
     var mapViewRef: MapView? by remember { mutableStateOf(null) }
 
+    // --- GOOGLE MAPS TILE SOURCE ---
+    val googleMaps = object : XYTileSource(
+        "Google-Maps", 0, 19, 256, ".png", 
+        arrayOf("https://mt0.google.com/vt/lyrs=m&x=")
+    ) {
+        override fun getTileURLString(pMapTileIndex: Long): String {
+            return baseUrl + MapTileIndex.getX(pMapTileIndex) + "&y=" + MapTileIndex.getY(pMapTileIndex) + "&z=" + MapTileIndex.getZoom(pMapTileIndex)
+        }
+    }
+
+    // --- HELPER FUNCTIONS ---
     fun updateAddress(point: GeoPoint) {
         scope.launch(Dispatchers.IO) {
             try {
@@ -138,19 +154,6 @@ fun HomeScreen(navController: NavController) {
         }
     }
 
-    LaunchedEffect(activeTrip?.tripId) {
-        if (activeTrip != null) {
-            val db = FirebaseDatabase.getInstance().getReference("trips").child(activeTrip!!.tripId)
-            db.addValueEventListener(object : ValueEventListener {
-                override fun onDataChange(snapshot: DataSnapshot) {
-                    val updatedTrip = snapshot.getValue(Trip::class.java)
-                    if (updatedTrip != null) activeTrip = updatedTrip
-                }
-                override fun onCancelled(e: DatabaseError) {}
-            })
-        }
-    }
-
     val fusedLocationClient = remember { LocationServices.getFusedLocationProviderClient(context) }
     fun zoomToUser() {
         if (ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
@@ -172,6 +175,19 @@ fun HomeScreen(navController: NavController) {
         else permissionLauncher.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION))
     }
 
+    LaunchedEffect(activeTrip?.tripId) {
+        if (activeTrip != null) {
+            val db = FirebaseDatabase.getInstance().getReference("trips").child(activeTrip!!.tripId)
+            db.addValueEventListener(object : ValueEventListener {
+                override fun onDataChange(snapshot: DataSnapshot) {
+                    val updatedTrip = snapshot.getValue(Trip::class.java)
+                    if (updatedTrip != null) activeTrip = updatedTrip
+                }
+                override fun onCancelled(e: DatabaseError) {}
+            })
+        }
+    }
+
     // --- DRAWER UI ---
     ModalNavigationDrawer(
         drawerState = drawerState,
@@ -179,40 +195,25 @@ fun HomeScreen(navController: NavController) {
             ModalDrawerSheet {
                 Spacer(modifier = Modifier.height(24.dp))
                 Text("Bayera Travel", modifier = Modifier.padding(16.dp), style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
-                
-                // FIXED: Changed HorizontalDivider to Divider
-                Divider()
-                
+                HorizontalDivider()
                 NavigationDrawerItem(
-                    label = { Text("Profile") },
-                    selected = false,
-                    icon = { Icon(Icons.Default.Person, null) },
-                    onClick = { 
-                        scope.launch { drawerState.close() }
-                        navController.navigate("profile") 
-                    }
+                    label = { Text("Profile") }, selected = false, icon = { Icon(Icons.Default.Person, null) },
+                    onClick = { scope.launch { drawerState.close() }; navController.navigate("profile") }
                 )
                 NavigationDrawerItem(
-                    label = { Text("Wallet") },
-                    selected = false,
-                    icon = { Icon(Icons.Default.AccountBalanceWallet, null) },
-                    onClick = { scope.launch { drawerState.close() } }
-                )
-                NavigationDrawerItem(
-                    label = { Text("My Orders") },
-                    selected = false,
-                    icon = { Icon(Icons.Default.History, null) },
-                    onClick = { scope.launch { drawerState.close() } }
+                    label = { Text("Settings") }, selected = false, icon = { Icon(Icons.Default.Settings, null) },
+                    onClick = { scope.launch { drawerState.close() }; navController.navigate("settings") }
                 )
             }
         }
     ) {
         Box(modifier = Modifier.fillMaxSize()) {
             
+            // MAP
             AndroidView(
                 factory = { ctx ->
                     MapView(ctx).apply {
-                        setTileSource(TileSourceFactory.MAPNIK)
+                        setTileSource(googleMaps)
                         setMultiTouchControls(true)
                         isTilesScaledToDpi = true
                         minZoomLevel = 4.0
@@ -287,7 +288,6 @@ fun HomeScreen(navController: NavController) {
                     containerColor = Color.White
                 ) { Icon(Icons.Default.Menu, contentDescription = "Menu", tint = Color.Black) }
             }
-
             if (step > 0 && step < 3) {
                  FloatingActionButton(
                     onClick = { step--; routePoints = emptyList() },
@@ -296,6 +296,7 @@ fun HomeScreen(navController: NavController) {
                 ) { Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = Color.Black) }
             }
 
+            // BOTTOM SHEET
             Column(
                 modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth().background(Color.White, shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)).padding(24.dp)
             ) {
