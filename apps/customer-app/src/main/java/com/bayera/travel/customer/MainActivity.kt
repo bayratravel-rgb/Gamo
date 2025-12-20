@@ -13,13 +13,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.LocationOn
-import androidx.compose.material.icons.filled.Menu
-import androidx.compose.material.icons.filled.MyLocation
-import androidx.compose.material.icons.filled.Place
-import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -47,8 +41,9 @@ import org.osmdroid.config.Configuration
 import org.osmdroid.events.MapListener
 import org.osmdroid.events.ScrollEvent
 import org.osmdroid.events.ZoomEvent
-import org.osmdroid.tileprovider.tilesource.TileSourceFactory
+import org.osmdroid.tileprovider.tilesource.XYTileSource
 import org.osmdroid.util.GeoPoint
+import org.osmdroid.util.MapTileIndex
 import org.osmdroid.views.MapView
 import org.osmdroid.views.overlay.Marker
 import org.osmdroid.views.overlay.Polyline
@@ -74,6 +69,7 @@ fun AppUI() {
     
     val startGeo = GeoPoint(6.0206, 37.5557)
     
+    // UI State
     var step by remember { mutableIntStateOf(0) }
     var currentGeoPoint by remember { mutableStateOf(startGeo) }
     var pickupGeo by remember { mutableStateOf<GeoPoint?>(null) }
@@ -83,14 +79,27 @@ fun AppUI() {
     var estimatedPrice by remember { mutableStateOf(0.0) }
     var addressText by remember { mutableStateOf("Locating...") }
     var isMapMoving by remember { mutableStateOf(false) }
-    
     var routePoints by remember { mutableStateOf<List<GeoPoint>>(emptyList()) }
     var activeTrip by remember { mutableStateOf<Trip?>(null) }
     
     var mapController: org.osmdroid.api.IMapController? by remember { mutableStateOf(null) }
     var mapViewRef: MapView? by remember { mutableStateOf(null) }
 
-    val fusedLocationClient = remember { LocationServices.getFusedLocationProviderClient(context) }
+    // --- GOOGLE MAPS TILE SOURCE ---
+    val googleMaps = object : XYTileSource(
+        "Google-Maps", 
+        0, 19, 256, ".png", 
+        arrayOf(
+            "https://mt0.google.com/vt/lyrs=m&x=",
+            "https://mt1.google.com/vt/lyrs=m&x=",
+            "https://mt2.google.com/vt/lyrs=m&x=",
+            "https://mt3.google.com/vt/lyrs=m&x="
+        )
+    ) {
+        override fun getTileURLString(pMapTileIndex: Long): String {
+            return baseUrl + MapTileIndex.getX(pMapTileIndex) + "&y=" + MapTileIndex.getY(pMapTileIndex) + "&z=" + MapTileIndex.getZoom(pMapTileIndex)
+        }
+    }
 
     fun fetchRoute(start: GeoPoint, end: GeoPoint) {
         scope.launch(Dispatchers.IO) {
@@ -112,7 +121,7 @@ fun AppUI() {
         }
     }
 
-    // --- REVERSE GEOCODING HELPER ---
+    // Address Update
     fun updateAddress(point: GeoPoint) {
         scope.launch(Dispatchers.IO) {
             try {
@@ -120,20 +129,22 @@ fun AppUI() {
                 val addresses = geocoder.getFromLocation(point.latitude, point.longitude, 1)
                 if (!addresses.isNullOrEmpty()) {
                     val line = addresses[0].getAddressLine(0)
-                    val shortAddr = line.split(",").take(2).joinToString(",")
+                    // Take first 3 parts for better detail in Ethiopia
+                    val shortAddr = line.split(",").take(3).joinToString(",")
                     withContext(Dispatchers.Main) { addressText = shortAddr }
                 }
             } catch (e: Exception) { withContext(Dispatchers.Main) { addressText = "Unknown" } }
         }
     }
 
+    // Listener
     LaunchedEffect(activeTrip?.tripId) {
         if (activeTrip != null) {
             val db = FirebaseDatabase.getInstance().getReference("trips").child(activeTrip!!.tripId)
-            // Listener logic here (simplified for fix)
         }
     }
 
+    val fusedLocationClient = remember { LocationServices.getFusedLocationProviderClient(context) }
     fun zoomToUser() {
         if (ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
             fusedLocationClient.lastLocation.addOnSuccessListener { loc ->
@@ -145,7 +156,6 @@ fun AppUI() {
             }
         }
     }
-    
     val permissionLauncher = rememberLauncherForActivityResult(contract = ActivityResultContracts.RequestMultiplePermissions()) { 
         if (it[Manifest.permission.ACCESS_FINE_LOCATION] == true) zoomToUser() 
     }
@@ -159,35 +169,26 @@ fun AppUI() {
         AndroidView(
             factory = { ctx ->
                 MapView(ctx).apply {
-                    setTileSource(TileSourceFactory.MAPNIK)
+                    // --- APPLY GOOGLE MAPS SKIN ---
+                    setTileSource(googleMaps)
+                    
                     setMultiTouchControls(true)
                     isTilesScaledToDpi = true
                     minZoomLevel = 4.0
                     maxZoomLevel = 22.0
                     controller.setZoom(16.0)
                     controller.setCenter(startGeo)
-                    
                     mapController = controller
                     mapViewRef = this
 
                     addMapListener(object : MapListener {
-                        override fun onScroll(event: ScrollEvent?): Boolean { 
-                            isMapMoving = true
-                            return true 
-                        }
-                        override fun onZoom(event: ZoomEvent?): Boolean { 
-                            isMapMoving = true
-                            return true 
-                        }
+                        override fun onScroll(event: ScrollEvent?): Boolean { isMapMoving = true; return true }
+                        override fun onZoom(event: ZoomEvent?): Boolean { isMapMoving = true; return true }
                     })
                 }
             },
             update = { mapView ->
-                if (isMapMoving) {
-                    currentGeoPoint = mapView.mapCenter as GeoPoint
-                    // Call the helper safely
-                    // Note: We delay actual address fetch to avoid spamming
-                }
+                if (isMapMoving) currentGeoPoint = mapView.mapCenter as GeoPoint
                 
                 mapView.overlays.clear()
                 if (step >= 1 || step == 3) {
@@ -202,7 +203,6 @@ fun AppUI() {
                     m2.position = dropoffGeo
                     m2.title = "Dropoff"
                     mapView.overlays.add(m2)
-                    
                     if (routePoints.isNotEmpty()) {
                         val line = Polyline()
                         line.setPoints(routePoints)
@@ -216,12 +216,10 @@ fun AppUI() {
             modifier = Modifier.fillMaxSize()
         )
 
-        // Debounce Address Fetch
         LaunchedEffect(isMapMoving) {
             if (isMapMoving) {
                 kotlinx.coroutines.delay(800)
                 isMapMoving = false 
-                // FETCH ADDRESS NOW
                 updateAddress(currentGeoPoint)
             }
         }
@@ -262,13 +260,8 @@ fun AppUI() {
                 Spacer(modifier = Modifier.height(16.dp))
                 Button(
                     onClick = { 
-                        // FORCE CAPTURE
                         val center = mapViewRef?.mapCenter as? GeoPoint
-                        if (center != null) {
-                            pickupGeo = center 
-                            pickupAddr = addressText
-                            step = 1 
-                        }
+                        if (center != null) { pickupGeo = center; pickupAddr = addressText; step = 1 }
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2E7D32)),
                     modifier = Modifier.fillMaxWidth().height(50.dp)
@@ -281,8 +274,7 @@ fun AppUI() {
                     onClick = { 
                         val center = mapViewRef?.mapCenter as? GeoPoint
                         if (center != null) {
-                            dropoffGeo = center
-                            dropoffAddr = addressText
+                            dropoffGeo = center; dropoffAddr = addressText
                             val dist = FareCalculator.calculateDistance(pickupGeo!!.latitude, pickupGeo!!.longitude, dropoffGeo!!.latitude, dropoffGeo!!.longitude)
                             estimatedPrice = FareCalculator.calculatePrice(dist)
                             fetchRoute(pickupGeo!!, dropoffGeo!!)
@@ -297,10 +289,7 @@ fun AppUI() {
                 Text("🟢 From: $pickupAddr")
                 Text("🔴 To: $dropoffAddr")
                 Spacer(modifier = Modifier.height(16.dp))
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    Text("Total Price", color = Color.Gray)
-                    Text("$estimatedPrice ETB", style = MaterialTheme.typography.headlineMedium, color = Color(0xFF2E7D32), fontWeight = FontWeight.Bold)
-                }
+                Text("Total Price: $estimatedPrice ETB", style = MaterialTheme.typography.headlineMedium, color = Color(0xFF2E7D32), fontWeight = FontWeight.Bold)
                 Spacer(modifier = Modifier.height(24.dp))
                 Button(
                     onClick = { 
