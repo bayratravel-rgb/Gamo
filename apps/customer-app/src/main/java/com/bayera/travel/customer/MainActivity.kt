@@ -195,7 +195,7 @@ fun HomeScreen(navController: NavController) {
             ModalDrawerSheet {
                 Spacer(modifier = Modifier.height(24.dp))
                 Text("Bayera Travel", modifier = Modifier.padding(16.dp), style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
-                HorizontalDivider()
+                Divider()
                 NavigationDrawerItem(
                     label = { Text("Profile") }, selected = false, icon = { Icon(Icons.Default.Person, null) },
                     onClick = { scope.launch { drawerState.close() }; navController.navigate("profile") }
