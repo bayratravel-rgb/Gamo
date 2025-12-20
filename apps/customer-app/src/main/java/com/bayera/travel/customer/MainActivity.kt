@@ -104,7 +104,6 @@ fun HomeScreen(navController: NavController) {
     var mapController: org.osmdroid.api.IMapController? by remember { mutableStateOf(null) }
     var mapViewRef: MapView? by remember { mutableStateOf(null) }
 
-    // --- REVERSE GEOCODING ---
     fun updateAddress(point: GeoPoint) {
         scope.launch(Dispatchers.IO) {
             try {
@@ -119,7 +118,6 @@ fun HomeScreen(navController: NavController) {
         }
     }
 
-    // --- ROUTING ---
     fun fetchRoute(start: GeoPoint, end: GeoPoint) {
         scope.launch(Dispatchers.IO) {
             try {
@@ -181,7 +179,9 @@ fun HomeScreen(navController: NavController) {
             ModalDrawerSheet {
                 Spacer(modifier = Modifier.height(24.dp))
                 Text("Bayera Travel", modifier = Modifier.padding(16.dp), style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
-                HorizontalDivider()
+                
+                // FIXED: Changed HorizontalDivider to Divider
+                Divider()
                 
                 NavigationDrawerItem(
                     label = { Text("Profile") },
@@ -209,7 +209,6 @@ fun HomeScreen(navController: NavController) {
     ) {
         Box(modifier = Modifier.fillMaxSize()) {
             
-            // MAP VIEW
             AndroidView(
                 factory = { ctx ->
                     MapView(ctx).apply {
@@ -275,14 +274,12 @@ fun HomeScreen(navController: NavController) {
                 )
             }
 
-            // GPS
             FloatingActionButton(
                 onClick = { zoomToUser() },
                 modifier = Modifier.align(Alignment.CenterEnd).padding(end = 16.dp).offset(y = 50.dp),
                 containerColor = Color.White
             ) { Icon(Icons.Default.MyLocation, contentDescription = "My Location", tint = Color(0xFF1E88E5)) }
 
-            // TOP MENU (Opens Drawer)
             if (step < 3) {
                  SmallFloatingActionButton(
                     onClick = { scope.launch { drawerState.open() } },
@@ -291,7 +288,6 @@ fun HomeScreen(navController: NavController) {
                 ) { Icon(Icons.Default.Menu, contentDescription = "Menu", tint = Color.Black) }
             }
 
-            // BACK BUTTON
             if (step > 0 && step < 3) {
                  FloatingActionButton(
                     onClick = { step--; routePoints = emptyList() },
@@ -300,7 +296,6 @@ fun HomeScreen(navController: NavController) {
                 ) { Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = Color.Black) }
             }
 
-            // BOTTOM SHEET
             Column(
                 modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth().background(Color.White, shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)).padding(24.dp)
             ) {
