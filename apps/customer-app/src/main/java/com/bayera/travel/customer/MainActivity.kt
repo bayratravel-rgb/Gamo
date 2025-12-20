@@ -13,7 +13,13 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material.icons.filled.MyLocation
+import androidx.compose.material.icons.filled.Place
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -71,7 +77,6 @@ fun AppUI() {
     
     val startGeo = GeoPoint(6.0206, 37.5557)
     
-    // STATES
     var step by remember { mutableIntStateOf(0) }
     var currentGeoPoint by remember { mutableStateOf(startGeo) }
     var pickupGeo by remember { mutableStateOf<GeoPoint?>(null) }
@@ -81,41 +86,27 @@ fun AppUI() {
     var estimatedPrice by remember { mutableStateOf(0.0) }
     var addressText by remember { mutableStateOf("Locating...") }
     var isMapMoving by remember { mutableStateOf(false) }
-    
-    // ROUTE POINTS
     var routePoints by remember { mutableStateOf<List<GeoPoint>>(emptyList()) }
-    
     var activeTrip by remember { mutableStateOf<Trip?>(null) }
     var mapController: org.osmdroid.api.IMapController? by remember { mutableStateOf(null) }
 
-    // --- ROUTING FUNCTION (OSRM) ---
     fun fetchRoute(start: GeoPoint, end: GeoPoint) {
         scope.launch(Dispatchers.IO) {
             try {
                 val client = OkHttpClient()
                 val url = "http://router.project-osrm.org/route/v1/driving/${start.longitude},${start.latitude};${end.longitude},${end.latitude}?overview=full&geometries=geojson"
-                val request = Request.Builder().url(url).build()
-                val response = client.newCall(request).execute()
-                
+                val response = client.newCall(Request.Builder().url(url).build()).execute()
                 if (response.isSuccessful) {
                     val json = JSONObject(response.body!!.string())
-                    val coordinates = json.getJSONArray("routes")
-                        .getJSONObject(0).getJSONObject("geometry")
-                        .getJSONArray("coordinates")
-                    
+                    val coordinates = json.getJSONArray("routes").getJSONObject(0).getJSONObject("geometry").getJSONArray("coordinates")
                     val points = ArrayList<GeoPoint>()
                     for (i in 0 until coordinates.length()) {
                         val coord = coordinates.getJSONArray(i)
                         points.add(GeoPoint(coord.getDouble(1), coord.getDouble(0)))
                     }
-                    
-                    withContext(Dispatchers.Main) {
-                        routePoints = points
-                    }
+                    withContext(Dispatchers.Main) { routePoints = points }
                 }
-            } catch (e: Exception) {
-                // If fails, we just don't draw the line, no crash
-            }
+            } catch (e: Exception) {}
         }
     }
 
@@ -132,29 +123,7 @@ fun AppUI() {
         }
     }
 
-    val fusedLocationClient = remember { LocationServices.getFusedLocationProviderClient(context) }
-    fun zoomToUser() {
-        if (ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
-            fusedLocationClient.lastLocation.addOnSuccessListener { loc ->
-                if (loc != null && step < 2) {
-                    val userPos = GeoPoint(loc.latitude, loc.longitude)
-                    mapController?.animateTo(userPos)
-                    mapController?.setZoom(18.5)
-                }
-            }
-        }
-    }
-    
-    val permissionLauncher = rememberLauncherForActivityResult(contract = ActivityResultContracts.RequestMultiplePermissions()) { 
-        if (it[Manifest.permission.ACCESS_FINE_LOCATION] == true) zoomToUser() 
-    }
-    LaunchedEffect(Unit) {
-        if (ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) zoomToUser()
-        else permissionLauncher.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION))
-    }
-
     Box(modifier = Modifier.fillMaxSize()) {
-        
         AndroidView(
             factory = { ctx ->
                 MapView(ctx).apply {
@@ -177,22 +146,23 @@ fun AppUI() {
                 
                 mapView.overlays.clear()
 
-                if (step >= 1 || step == 3) {
+                // --- LOGIC FIX: KEEP PINS VISIBLE IN STEP 3 ---
+                val showOverlays = (step >= 1 || step == 3) && pickupGeo != null
+                
+                if (showOverlays) {
                     val m1 = Marker(mapView)
                     m1.position = pickupGeo
                     m1.title = "Pickup"
-                    // Use default marker or custom if available
                     m1.icon = ContextCompat.getDrawable(context, org.osmdroid.library.R.drawable.marker_default)
                     mapView.overlays.add(m1)
                 }
 
-                if (step >= 2 || step == 3) {
+                if ((step >= 2 || step == 3) && dropoffGeo != null) {
                     val m2 = Marker(mapView)
                     m2.position = dropoffGeo
                     m2.title = "Dropoff"
                     mapView.overlays.add(m2)
                     
-                    // --- DRAW REAL ROAD LINE ---
                     if (routePoints.isNotEmpty()) {
                         val line = Polyline()
                         line.setPoints(routePoints)
@@ -206,6 +176,7 @@ fun AppUI() {
             modifier = Modifier.fillMaxSize()
         )
 
+        // Address Fetcher
         LaunchedEffect(isMapMoving) {
             if (isMapMoving && step < 2) {
                 kotlinx.coroutines.delay(600)
@@ -233,28 +204,11 @@ fun AppUI() {
             )
         }
 
-        FloatingActionButton(
-            onClick = { zoomToUser() },
-            modifier = Modifier.align(Alignment.CenterEnd).padding(end = 16.dp).offset(y = 50.dp),
-            containerColor = Color.White
-        ) { Icon(Icons.Default.MyLocation, contentDescription = "My Location", tint = Color(0xFF1E88E5)) }
-        
-        if (step > 0 && step < 3) {
-             FloatingActionButton(
-                onClick = { 
-                    step-- 
-                    routePoints = emptyList() // Clear line if going back
-                },
-                modifier = Modifier.align(Alignment.TopStart).padding(top = 40.dp, start = 16.dp),
-                containerColor = Color.White
-            ) { Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = Color.Black) }
-        }
-
+        // Bottom Sheet Logic (Same as before)
         Column(
             modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth().background(Color.White, shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)).padding(24.dp)
         ) {
             if (step == 3) {
-                // WAITING MODE
                 if (activeTrip?.status == TripStatus.ACCEPTED) {
                     Text("✅ Driver Found!", style = MaterialTheme.typography.headlineSmall, color = Color(0xFF2E7D32), fontWeight = FontWeight.Bold)
                     Text("Driver: ${activeTrip?.driverId}", style = MaterialTheme.typography.bodyLarge)
@@ -277,7 +231,6 @@ fun AppUI() {
                         modifier = Modifier.fillMaxWidth()
                     ) { Text("Cancel Request", color = Color.Black) }
                 }
-                
             } else if (step == 0) {
                 Text("Start Trip From?", style = MaterialTheme.typography.titleMedium, color = Color.Gray)
                 Text(addressText, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, maxLines = 1)
@@ -291,7 +244,6 @@ fun AppUI() {
                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2E7D32)),
                     modifier = Modifier.fillMaxWidth().height(50.dp)
                 ) { Text("Set Pickup", color = Color.White) }
-                
             } else if (step == 1) {
                 Text("Where to?", style = MaterialTheme.typography.titleMedium, color = Color.Gray)
                 Text(addressText, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, maxLines = 1)
@@ -302,17 +254,12 @@ fun AppUI() {
                         dropoffAddr = addressText
                         val dist = FareCalculator.calculateDistance(pickupGeo!!.latitude, pickupGeo!!.longitude, dropoffGeo!!.latitude, dropoffGeo!!.longitude)
                         estimatedPrice = FareCalculator.calculatePrice(dist)
-                        
-                        // FETCH ROAD ROUTE HERE
                         fetchRoute(pickupGeo!!, dropoffGeo!!)
-                        
                         step = 2 
-                        mapController?.setZoom(13.0)
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFD32F2F)),
                     modifier = Modifier.fillMaxWidth().height(50.dp)
                 ) { Text("Set Destination", color = Color.White) }
-                
             } else if (step == 2) {
                 Text("Trip Summary", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
                 Text("🟢 $pickupAddr")
