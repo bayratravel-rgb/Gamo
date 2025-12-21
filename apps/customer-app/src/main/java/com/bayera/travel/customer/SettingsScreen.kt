@@ -1,5 +1,7 @@
 package com.bayera.travel.customer
 
+import android.content.Context
+import android.widget.Toast
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
@@ -7,13 +9,18 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(navController: NavController) {
-    var darkMode by remember { mutableStateOf(false) }
+    val context = LocalContext.current
+    val prefs = context.getSharedPreferences("user_prefs", Context.MODE_PRIVATE)
+
+    // Load saved state
+    var darkMode by remember { mutableStateOf(prefs.getBoolean("dark_mode", false)) }
     var notifications by remember { mutableStateOf(true) }
 
     Scaffold(
@@ -38,9 +45,16 @@ fun SettingsScreen(navController: NavController) {
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text("Dark Mode")
-                Switch(checked = darkMode, onCheckedChange = { darkMode = it })
+                Switch(
+                    checked = darkMode,
+                    onCheckedChange = { isChecked ->
+                        darkMode = isChecked
+                        // SAVE TO STORAGE
+                        prefs.edit().putBoolean("dark_mode", isChecked).apply()
+                        Toast.makeText(context, "Restart app to apply changes", Toast.LENGTH_SHORT).show()
+                    }
+                )
             }
-            // Use standard Divider (Fix for HorizontalDivider error)
             Divider(modifier = Modifier.padding(vertical = 12.dp))
             
             Row(
