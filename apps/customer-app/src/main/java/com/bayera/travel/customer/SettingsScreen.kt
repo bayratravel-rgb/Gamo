@@ -19,6 +19,7 @@ fun SettingsScreen(navController: NavController) {
     val prefs = context.getSharedPreferences("user_prefs", Context.MODE_PRIVATE)
     
     var darkMode by remember { mutableStateOf(prefs.getBoolean("dark_mode", false)) }
+    var notifications by remember { mutableStateOf(true) }
 
     Scaffold(
         topBar = {
@@ -33,6 +34,9 @@ fun SettingsScreen(navController: NavController) {
         }
     ) { padding ->
         Column(modifier = Modifier.padding(padding).padding(16.dp)) {
+            Text("General", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
+            Spacer(modifier = Modifier.height(16.dp))
+            
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -44,13 +48,26 @@ fun SettingsScreen(navController: NavController) {
                     onCheckedChange = { 
                         darkMode = it
                         prefs.edit().putBoolean("dark_mode", it).apply()
-                        // Restart activity to apply theme? Or rely on state.
-                        // For MVP, user needs to restart app or nav back to see effect.
+                        // Note: Requires app restart to take full effect in MVP
                     }
                 )
             }
             Divider(modifier = Modifier.padding(vertical = 12.dp))
-            Text("Version: 1.1.0 (Arba Minch Edition)")
+            
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("Notifications")
+                Switch(checked = notifications, onCheckedChange = { notifications = it })
+            }
+            Divider(modifier = Modifier.padding(vertical = 12.dp))
+            
+            Text("About", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
+            Spacer(modifier = Modifier.height(16.dp))
+            Text("Version: 1.1.0")
+            Text("Developer: EtCoderYeabkal")
         }
     }
 }
