@@ -1,14 +1,32 @@
 package com.bayera.travel.utils
 
+import com.bayera.travel.common.models.VehicleType
 import kotlin.math.*
 
 object FareCalculator {
-    private const val BASE_FARE = 50.0 
-    private const val RATE_PER_KM = 30.0 
-    private const val MINIMUM_FARE = 100.0
+    
+    // BASE FARES (Starting Price)
+    private fun getBaseFare(type: VehicleType): Double {
+        return when (type) {
+            VehicleType.BAJAJ -> 30.0
+            VehicleType.POOL -> 20.0
+            VehicleType.COMFORT -> 100.0
+            VehicleType.LUXURY -> 250.0
+        }
+    }
+
+    // COST PER KM (Fuel + Profit)
+    private fun getRatePerKm(type: VehicleType): Double {
+        return when (type) {
+            VehicleType.BAJAJ -> 25.0
+            VehicleType.POOL -> 15.0
+            VehicleType.COMFORT -> 50.0
+            VehicleType.LUXURY -> 150.0 // Expensive fuel!
+        }
+    }
 
     fun calculateDistance(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Double {
-        val R = 6371 // Earth radius in km
+        val R = 6371 // km
         val dLat = Math.toRadians(lat2 - lat1)
         val dLon = Math.toRadians(lon2 - lon1)
         val a = sin(dLat / 2) * sin(dLat / 2) +
@@ -18,9 +36,9 @@ object FareCalculator {
         return R * c
     }
 
-    fun calculatePrice(distanceKm: Double): Double {
-        val rawPrice = BASE_FARE + (distanceKm * RATE_PER_KM)
-        val finalPrice = if (rawPrice < MINIMUM_FARE) MINIMUM_FARE else rawPrice
-        return (finalPrice / 10).roundToInt() * 10.0
+    fun calculatePrice(distanceKm: Double, type: VehicleType): Double {
+        val price = getBaseFare(type) + (distanceKm * getRatePerKm(type))
+        // Round to nearest 10
+        return (ceil(price / 10) * 10)
     }
 }

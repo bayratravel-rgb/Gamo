@@ -9,8 +9,9 @@ data class Trip(
     val status: TripStatus = TripStatus.REQUESTED,
     val price: Double = 0.0,
     val estimatedTime: Int = 0,
+    val pickupNotes: String = "",
     // --- NEW FIELD ---
-    val pickupNotes: String = "" 
+    val vehicleType: VehicleType = VehicleType.BAJAJ
 )
 
 data class Location(
@@ -21,4 +22,11 @@ data class Location(
 
 enum class TripStatus {
     REQUESTED, ACCEPTED, IN_PROGRESS, COMPLETED, CANCELLED
+}
+
+enum class VehicleType {
+    BAJAJ,      // Cheapest
+    COMFORT,    // Toyota Vitz/Corolla
+    LUXURY,     // Land Cruiser/Prado
+    POOL        // Shared Ride
 }
