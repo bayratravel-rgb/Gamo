@@ -1,11 +1,11 @@
 package com.bayera.travel.utils
 
+// FIXED: Import the Enum from Shared Module
 import com.bayera.travel.common.models.VehicleType
 import kotlin.math.*
 
 object FareCalculator {
     
-    // BASE FARES (Starting Price)
     private fun getBaseFare(type: VehicleType): Double {
         return when (type) {
             VehicleType.BAJAJ -> 30.0
@@ -15,13 +15,12 @@ object FareCalculator {
         }
     }
 
-    // COST PER KM (Fuel + Profit)
     private fun getRatePerKm(type: VehicleType): Double {
         return when (type) {
             VehicleType.BAJAJ -> 25.0
             VehicleType.POOL -> 15.0
             VehicleType.COMFORT -> 50.0
-            VehicleType.LUXURY -> 150.0 // Expensive fuel!
+            VehicleType.LUXURY -> 150.0 
         }
     }
 
@@ -38,7 +37,6 @@ object FareCalculator {
 
     fun calculatePrice(distanceKm: Double, type: VehicleType): Double {
         val price = getBaseFare(type) + (distanceKm * getRatePerKm(type))
-        // Round to nearest 10
         return (ceil(price / 10) * 10)
     }
 }
