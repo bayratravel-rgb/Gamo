@@ -271,7 +271,7 @@ fun HomeScreen(navController: NavController) {
                     imageVector = if (step == 0) Icons.Default.Home else Icons.Default.Flag,
                     contentDescription = "Pin",
                     modifier = Modifier.size(40.dp).align(Alignment.Center).offset(y = (-20).dp),
-                    tint = if (step == 0) Color(0xFF2E7D32) else Color(0xFFD32F2F)
+                    tint = if (step == 0) Color(0xFF1E88E5) else Color(0xFFD32F2F)
                 )
             }
 

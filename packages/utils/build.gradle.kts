@@ -21,4 +21,6 @@ android {
 
 dependencies {
     implementation("androidx.core:core-ktx:1.12.0")
+    // --- THIS IS THE CRITICAL LINK ---
+    implementation(project(":packages:shared-types"))
 }

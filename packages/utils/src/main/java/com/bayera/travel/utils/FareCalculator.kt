@@ -1,6 +1,5 @@
 package com.bayera.travel.utils
 
-// FIXED: Import the Enum from Shared Module
 import com.bayera.travel.common.models.VehicleType
 import kotlin.math.*
 
