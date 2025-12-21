@@ -11,7 +11,10 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -32,6 +35,8 @@ import androidx.navigation.compose.rememberNavController
 import com.bayera.travel.common.models.Trip
 import com.bayera.travel.common.models.Location
 import com.bayera.travel.common.models.TripStatus
+// FIXED: Added Import for VehicleType
+import com.bayera.travel.common.models.VehicleType
 import com.bayera.travel.utils.FareCalculator
 import com.google.android.gms.location.LocationServices
 import com.google.firebase.FirebaseApp
@@ -69,13 +74,18 @@ class MainActivity : ComponentActivity() {
             val navController = rememberNavController()
             val context = LocalContext.current
             val prefs = context.getSharedPreferences("user_prefs", Context.MODE_PRIVATE)
-            val startScreen = if (prefs.getString("name", "").isNullOrEmpty()) "login" else "home"
+            
+            val isDark = prefs.getBoolean("dark_mode", false)
+            val colors = if(isDark) darkColorScheme() else lightColorScheme()
 
-            NavHost(navController = navController, startDestination = startScreen) {
-                composable("login") { LoginScreen(navController) }
-                composable("home") { HomeScreen(navController) }
-                composable("profile") { ProfileScreen(navController) }
-                composable("settings") { SettingsScreen(navController) }
+            MaterialTheme(colorScheme = colors) {
+                val startScreen = if (prefs.getString("name", "").isNullOrEmpty()) "login" else "home"
+                NavHost(navController = navController, startDestination = startScreen) {
+                    composable("login") { LoginScreen(navController) }
+                    composable("home") { HomeScreen(navController) }
+                    composable("profile") { ProfileScreen(navController) }
+                    composable("settings") { SettingsScreen(navController) }
+                }
             }
         }
     }
@@ -100,34 +110,30 @@ fun HomeScreen(navController: NavController) {
     var dropoffGeo by remember { mutableStateOf<GeoPoint?>(null) }
     var pickupAddr by remember { mutableStateOf("") }
     var dropoffAddr by remember { mutableStateOf("") }
-    var estimatedPrice by remember { mutableStateOf(0.0) }
     var addressText by remember { mutableStateOf("Locating...") }
     var isMapMoving by remember { mutableStateOf(false) }
     var routePoints by remember { mutableStateOf<List<GeoPoint>>(emptyList()) }
     var activeTrip by remember { mutableStateOf<Trip?>(null) }
     
+    var selectedVehicle by remember { mutableStateOf(VehicleType.BAJAJ) }
+    var estimatedPrice by remember { mutableStateOf(0.0) }
+
     var mapController: org.osmdroid.api.IMapController? by remember { mutableStateOf(null) }
     var mapViewRef: MapView? by remember { mutableStateOf(null) }
 
-    // --- GOOGLE MAPS TILE SOURCE ---
-    val googleMaps = object : XYTileSource(
-        "Google-Maps", 0, 19, 256, ".png", 
-        arrayOf("https://mt0.google.com/vt/lyrs=m&x=")
-    ) {
+    val googleMaps = object : XYTileSource("Google", 0, 19, 256, ".png", arrayOf("https://mt0.google.com/vt/lyrs=m&x=")) {
         override fun getTileURLString(pMapTileIndex: Long): String {
             return baseUrl + MapTileIndex.getX(pMapTileIndex) + "&y=" + MapTileIndex.getY(pMapTileIndex) + "&z=" + MapTileIndex.getZoom(pMapTileIndex)
         }
     }
 
-    // --- HELPER FUNCTIONS ---
     fun updateAddress(point: GeoPoint) {
         scope.launch(Dispatchers.IO) {
             try {
                 val geocoder = Geocoder(context, Locale.getDefault())
                 val addresses = geocoder.getFromLocation(point.latitude, point.longitude, 1)
                 if (!addresses.isNullOrEmpty()) {
-                    val line = addresses[0].getAddressLine(0)
-                    val shortAddr = line.split(",").take(2).joinToString(",")
+                    val shortAddr = addresses[0].getAddressLine(0).split(",").take(2).joinToString(",")
                     withContext(Dispatchers.Main) { addressText = shortAddr }
                 }
             } catch (e: Exception) { withContext(Dispatchers.Main) { addressText = "Unknown" } }
@@ -154,25 +160,13 @@ fun HomeScreen(navController: NavController) {
         }
     }
 
-    val fusedLocationClient = remember { LocationServices.getFusedLocationProviderClient(context) }
-    fun zoomToUser() {
-        if (ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
-            fusedLocationClient.lastLocation.addOnSuccessListener { loc ->
-                if (loc != null) {
-                    val userPos = GeoPoint(loc.latitude, loc.longitude)
-                    mapController?.animateTo(userPos)
-                    mapController?.setZoom(18.0)
-                }
-            }
+    // Helper to calc price using BOTH distance AND vehicle type
+    fun refreshPrice() {
+        if (pickupGeo != null && dropoffGeo != null) {
+            val dist = FareCalculator.calculateDistance(pickupGeo!!.latitude, pickupGeo!!.longitude, dropoffGeo!!.latitude, dropoffGeo!!.longitude)
+            // FIXED: Passing selectedVehicle here
+            estimatedPrice = FareCalculator.calculatePrice(dist, selectedVehicle)
         }
-    }
-
-    val permissionLauncher = rememberLauncherForActivityResult(contract = ActivityResultContracts.RequestMultiplePermissions()) { 
-        if (it[Manifest.permission.ACCESS_FINE_LOCATION] == true) zoomToUser() 
-    }
-    LaunchedEffect(Unit) {
-        if (ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) zoomToUser()
-        else permissionLauncher.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION))
     }
 
     LaunchedEffect(activeTrip?.tripId) {
@@ -188,28 +182,40 @@ fun HomeScreen(navController: NavController) {
         }
     }
 
-    // --- DRAWER UI ---
+    val fusedLocationClient = remember { LocationServices.getFusedLocationProviderClient(context) }
+    fun zoomToUser() {
+        if (ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
+            fusedLocationClient.lastLocation.addOnSuccessListener { loc ->
+                if (loc != null) {
+                    val userPos = GeoPoint(loc.latitude, loc.longitude)
+                    mapController?.animateTo(userPos)
+                    mapController?.setZoom(18.0)
+                }
+            }
+        }
+    }
+    
+    val permissionLauncher = rememberLauncherForActivityResult(contract = ActivityResultContracts.RequestMultiplePermissions()) { 
+        if (it[Manifest.permission.ACCESS_FINE_LOCATION] == true) zoomToUser() 
+    }
+    LaunchedEffect(Unit) {
+        if (ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) zoomToUser()
+        else permissionLauncher.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION))
+    }
+
     ModalNavigationDrawer(
         drawerState = drawerState,
         drawerContent = {
             ModalDrawerSheet {
                 Spacer(modifier = Modifier.height(24.dp))
                 Text("Bayera Travel", modifier = Modifier.padding(16.dp), style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
-                Divider()
-                NavigationDrawerItem(
-                    label = { Text("Profile") }, selected = false, icon = { Icon(Icons.Default.Person, null) },
-                    onClick = { scope.launch { drawerState.close() }; navController.navigate("profile") }
-                )
-                NavigationDrawerItem(
-                    label = { Text("Settings") }, selected = false, icon = { Icon(Icons.Default.Settings, null) },
-                    onClick = { scope.launch { drawerState.close() }; navController.navigate("settings") }
-                )
+                HorizontalDivider()
+                NavigationDrawerItem(label = { Text("Profile") }, selected = false, icon = { Icon(Icons.Default.Person, null) }, onClick = { scope.launch { drawerState.close() }; navController.navigate("profile") })
+                NavigationDrawerItem(label = { Text("Settings") }, selected = false, icon = { Icon(Icons.Default.Settings, null) }, onClick = { scope.launch { drawerState.close() }; navController.navigate("settings") })
             }
         }
     ) {
         Box(modifier = Modifier.fillMaxSize()) {
-            
-            // MAP
             AndroidView(
                 factory = { ctx ->
                     MapView(ctx).apply {
@@ -230,7 +236,6 @@ fun HomeScreen(navController: NavController) {
                 },
                 update = { mapView ->
                     if (isMapMoving) currentGeoPoint = mapView.mapCenter as GeoPoint
-                    
                     mapView.overlays.clear()
                     if (step >= 1 || step == 3) {
                         val m1 = Marker(mapView)
@@ -243,6 +248,8 @@ fun HomeScreen(navController: NavController) {
                         val m2 = Marker(mapView)
                         m2.position = dropoffGeo
                         m2.title = "Dropoff"
+                        // FIXED: Use Flag for Dropoff
+                        m2.icon = ContextCompat.getDrawable(context, org.osmdroid.library.R.drawable.marker_default) 
                         mapView.overlays.add(m2)
                         
                         if (routePoints.isNotEmpty()) {
@@ -268,38 +275,24 @@ fun HomeScreen(navController: NavController) {
 
             if (step < 2) {
                 Icon(
+                    // FLAG ICON FOR DESTINATION STEP
                     imageVector = if (step == 0) Icons.Default.Home else Icons.Default.Flag,
                     contentDescription = "Pin",
                     modifier = Modifier.size(40.dp).align(Alignment.Center).offset(y = (-20).dp),
-                    tint = if (step == 0) Color(0xFF1E88E5) else Color(0xFFD32F2F)
+                    tint = if (step == 0) Color(0xFF2E7D32) else Color(0xFFD32F2F)
                 )
             }
 
-            FloatingActionButton(
-                onClick = { zoomToUser() },
-                modifier = Modifier.align(Alignment.CenterEnd).padding(end = 16.dp).offset(y = 50.dp),
-                containerColor = Color.White
-            ) { Icon(Icons.Default.MyLocation, contentDescription = "My Location", tint = Color(0xFF1E88E5)) }
+            FloatingActionButton(onClick = { zoomToUser() }, modifier = Modifier.align(Alignment.CenterEnd).padding(end = 16.dp).offset(y = 50.dp), containerColor = Color.White) { Icon(Icons.Default.MyLocation, contentDescription = "My Location", tint = Color(0xFF1E88E5)) }
 
             if (step < 3) {
-                 SmallFloatingActionButton(
-                    onClick = { scope.launch { drawerState.open() } },
-                    modifier = Modifier.align(Alignment.TopStart).padding(top = 40.dp, start = 16.dp),
-                    containerColor = Color.White
-                ) { Icon(Icons.Default.Menu, contentDescription = "Menu", tint = Color.Black) }
+                 SmallFloatingActionButton(onClick = { scope.launch { drawerState.open() } }, modifier = Modifier.align(Alignment.TopStart).padding(top = 40.dp, start = 16.dp), containerColor = Color.White) { Icon(Icons.Default.Menu, contentDescription = "Menu", tint = Color.Black) }
             }
             if (step > 0 && step < 3) {
-                 FloatingActionButton(
-                    onClick = { step--; routePoints = emptyList() },
-                    modifier = Modifier.align(Alignment.TopStart).padding(top = 40.dp, start = 80.dp),
-                    containerColor = Color.White
-                ) { Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = Color.Black) }
+                 FloatingActionButton(onClick = { step--; routePoints = emptyList() }, modifier = Modifier.align(Alignment.TopStart).padding(top = 40.dp, start = 80.dp), containerColor = Color.White) { Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = Color.Black) }
             }
 
-            // BOTTOM SHEET
-            Column(
-                modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth().background(Color.White, shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)).padding(24.dp)
-            ) {
+            Column(modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth().background(Color.White, shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)).padding(24.dp)) {
                 if (step == 3) {
                     if (activeTrip?.status == TripStatus.ACCEPTED) {
                         Text("✅ Driver Found!", style = MaterialTheme.typography.headlineSmall, color = Color(0xFF2E7D32), fontWeight = FontWeight.Bold)
@@ -308,10 +301,10 @@ fun HomeScreen(navController: NavController) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             CircularProgressIndicator(color = Color(0xFF1E88E5), modifier = Modifier.size(24.dp))
                             Spacer(modifier = Modifier.width(16.dp))
-                            Text("Finding you a driver...", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                            Text("Finding a ${selectedVehicle.name}...", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                         }
                         Spacer(modifier = Modifier.height(16.dp))
-                        Button(onClick = { step = 0; activeTrip = null; pickupGeo = null; dropoffGeo = null; routePoints = emptyList() }, colors = ButtonDefaults.buttonColors(containerColor = Color.LightGray), modifier = Modifier.fillMaxWidth()) { Text("Cancel Request", color = Color.Black) }
+                        Button(onClick = { step = 0; activeTrip = null; pickupGeo = null; dropoffGeo = null; routePoints = emptyList() }, colors = ButtonDefaults.buttonColors(containerColor = Color.LightGray), modifier = Modifier.fillMaxWidth()) { Text("Cancel", color = Color.Black) }
                     }
                 } else if (step == 0) {
                     Text("Start Trip From?", style = MaterialTheme.typography.titleMedium, color = Color.Gray)
@@ -319,8 +312,8 @@ fun HomeScreen(navController: NavController) {
                     Spacer(modifier = Modifier.height(16.dp))
                     Button(onClick = { 
                         val center = mapViewRef?.mapCenter as? GeoPoint
-                        if (center != null) { pickupGeo = center; pickupAddr = addressText; step = 1 }
-                    }, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2E7D32)), modifier = Modifier.fillMaxWidth().height(50.dp)) { Text("Set Pickup Here") }
+                        if (center != null) { pickupGeo = center; pickupAddr = addressText; step = 1 } 
+                    }, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2E7D32)), modifier = Modifier.fillMaxWidth().height(50.dp)) { Text("Set Pickup") }
                 } else if (step == 1) {
                     Text("Where to?", style = MaterialTheme.typography.titleMedium, color = Color.Gray)
                     Text(addressText, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, maxLines = 1)
@@ -329,18 +322,32 @@ fun HomeScreen(navController: NavController) {
                         val center = mapViewRef?.mapCenter as? GeoPoint
                         if (center != null) {
                             dropoffGeo = center; dropoffAddr = addressText
-                            val dist = FareCalculator.calculateDistance(pickupGeo!!.latitude, pickupGeo!!.longitude, dropoffGeo!!.latitude, dropoffGeo!!.longitude)
-                            estimatedPrice = FareCalculator.calculatePrice(dist)
                             fetchRoute(pickupGeo!!, dropoffGeo!!)
+                            refreshPrice() // FIXED: This calls the updated function
                             step = 2 
                         }
-                    }, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFD32F2F)), modifier = Modifier.fillMaxWidth().height(50.dp)) { Text("Set Destination Here") }
+                    }, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFD32F2F)), modifier = Modifier.fillMaxWidth().height(50.dp)) { Text("Set Destination") }
                 } else if (step == 2) {
-                    Text("Trip Summary", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-                    Text("🟢 From: $pickupAddr")
-                    Text("🔴 To: $dropoffAddr")
+                    Text("Select Vehicle", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    
+                    // VEHICLE SELECTOR ROW
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        items(VehicleType.values()) { vehicle ->
+                            FilterChip(
+                                selected = selectedVehicle == vehicle,
+                                onClick = { selectedVehicle = vehicle; refreshPrice() },
+                                label = { Text(vehicle.name) },
+                                leadingIcon = { if (selectedVehicle == vehicle) Icon(Icons.Default.Check, null) }
+                            )
+                        }
+                    }
+                    
                     Spacer(modifier = Modifier.height(16.dp))
-                    Text("Total Price: $estimatedPrice ETB", style = MaterialTheme.typography.headlineMedium, color = Color(0xFF2E7D32), fontWeight = FontWeight.Bold)
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text("Price", color = Color.Gray)
+                        Text("$estimatedPrice ETB", style = MaterialTheme.typography.headlineMedium, color = Color(0xFF2E7D32), fontWeight = FontWeight.Bold)
+                    }
                     Spacer(modifier = Modifier.height(24.dp))
                     Button(onClick = { 
                         val db = FirebaseDatabase.getInstance().getReference("trips")
@@ -349,7 +356,7 @@ fun HomeScreen(navController: NavController) {
                             tripId = newId, customerId = "$userName ($userPhone)",
                             pickupLocation = Location(pickupGeo!!.latitude, pickupGeo!!.longitude, pickupAddr),
                             dropoffLocation = Location(dropoffGeo!!.latitude, dropoffGeo!!.longitude, dropoffAddr),
-                            price = estimatedPrice, status = TripStatus.REQUESTED
+                            price = estimatedPrice, status = TripStatus.REQUESTED, vehicleType = selectedVehicle
                         )
                         db.child(newId).setValue(trip)
                         activeTrip = trip
