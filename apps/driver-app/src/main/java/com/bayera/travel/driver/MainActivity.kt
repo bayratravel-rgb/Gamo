@@ -11,10 +11,10 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Home
+// --- FIXED: ADDED ALL ICON IMPORTS ---
+import androidx.compose.material.icons.filled.LocalTaxi
 import androidx.compose.material.icons.filled.LocalShipping
 import androidx.compose.material.icons.filled.Navigation
-import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Place
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -35,6 +35,8 @@ import com.google.firebase.database.FirebaseDatabase
 import com.google.firebase.database.ValueEventListener
 import com.bayera.travel.common.models.Trip
 import com.bayera.travel.common.models.TripStatus
+import com.bayera.travel.common.models.DeliveryOrder
+import com.bayera.travel.common.models.DeliveryStatus
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -45,117 +47,99 @@ class MainActivity : ComponentActivity() {
             val navController = rememberNavController()
             val context = LocalContext.current
             val prefs = context.getSharedPreferences("driver_prefs", Context.MODE_PRIVATE)
-            val startScreen = if (prefs.getString("name", "").isNullOrEmpty()) "login" else "home"
+            val startScreen = if (prefs.getString("name", "").isNullOrEmpty()) "login" else "dashboard"
 
             NavHost(navController = navController, startDestination = startScreen) {
                 composable("login") { LoginScreen(navController) }
-                // New Home Screen with Bottom Tabs
-                composable("home") { MainScreen() }
+                composable("dashboard") { DashboardScreen(navController) }
             }
         }
     }
 }
 
 @Composable
-fun MainScreen() {
-    var selectedTab by remember { mutableIntStateOf(0) } // 0=Taxi, 1=Delivery
-
-    Scaffold(
-        bottomBar = {
-            NavigationBar(containerColor = Color.White) {
-                NavigationBarItem(
-                    icon = { Icon(Icons.Default.Home, null) },
-                    label = { Text("Taxi") },
-                    selected = selectedTab == 0,
-                    onClick = { selectedTab = 0 },
-                    colors = NavigationBarItemDefaults.colors(selectedIconColor = Color(0xFF2E7D32))
-                )
-                NavigationBarItem(
-                    icon = { Icon(Icons.Default.LocalShipping, null) },
-                    label = { Text("Delivery") },
-                    selected = selectedTab == 1,
-                    onClick = { selectedTab = 1 },
-                    colors = NavigationBarItemDefaults.colors(selectedIconColor = Color(0xFFE65100))
-                )
-            }
-        }
-    ) { padding ->
-        Box(modifier = Modifier.padding(padding)) {
-            if (selectedTab == 0) {
-                // EXISTING TAXI DASHBOARD
-                TaxiDashboard()
-            } else {
-                // NEW DELIVERY DASHBOARD
-                DeliveryDashboard()
-            }
-        }
-    }
-}
-
-@Composable
-fun TaxiDashboard() {
+fun DashboardScreen(navController: NavController) {
     val context = LocalContext.current
     val prefs = context.getSharedPreferences("driver_prefs", Context.MODE_PRIVATE)
     val driverName = prefs.getString("name", "Driver") ?: "Driver"
     
-    var activeTrips by remember { mutableStateOf<List<Trip>>(emptyList()) }
-    var currentJob by remember { mutableStateOf<Trip?>(null) }
+    // UI State: 0 = Taxi, 1 = Delivery
+    var currentTab by remember { mutableIntStateOf(0) }
+    
+    var taxiRequests by remember { mutableStateOf<List<Trip>>(emptyList()) }
+    var deliveryRequests by remember { mutableStateOf<List<DeliveryOrder>>(emptyList()) }
 
+    // FETCH TAXI REQUESTS
     LaunchedEffect(Unit) {
-        val database = FirebaseDatabase.getInstance()
-        val tripsRef = database.getReference("trips")
-        tripsRef.addValueEventListener(object : ValueEventListener {
+        val db = FirebaseDatabase.getInstance().getReference("trips")
+        db.addValueEventListener(object : ValueEventListener {
             override fun onDataChange(snapshot: DataSnapshot) {
-                val trips = mutableListOf<Trip>()
-                var myJob: Trip? = null
+                val list = mutableListOf<Trip>()
                 for (child in snapshot.children) {
-                    try {
-                        val trip = child.getValue(Trip::class.java)
-                        if (trip != null) {
-                            if (trip.driverId != null && trip.driverId!!.contains(driverName)) {
-                                if (trip.status != TripStatus.COMPLETED && trip.status != TripStatus.CANCELLED) myJob = trip
-                            }
-                            if (trip.status == TripStatus.REQUESTED) trips.add(trip)
-                        }
-                    } catch (e: Exception) {}
+                    val t = child.getValue(Trip::class.java)
+                    if (t != null && t.status == TripStatus.REQUESTED) list.add(t)
                 }
-                activeTrips = trips.reversed()
-                currentJob = myJob
+                taxiRequests = list.reversed()
             }
-            override fun onCancelled(error: DatabaseError) {}
+            override fun onCancelled(e: DatabaseError) {}
+        })
+        
+        // FETCH DELIVERY REQUESTS
+        val deliveryDb = FirebaseDatabase.getInstance().getReference("deliveries")
+        deliveryDb.addValueEventListener(object : ValueEventListener {
+            override fun onDataChange(snapshot: DataSnapshot) {
+                val list = mutableListOf<DeliveryOrder>()
+                for (child in snapshot.children) {
+                    val d = child.getValue(DeliveryOrder::class.java)
+                    if (d != null && d.status == DeliveryStatus.PENDING) list.add(d)
+                }
+                deliveryRequests = list.reversed()
+            }
+            override fun onCancelled(e: DatabaseError) {}
         })
     }
 
-    Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
-        Text("Taxi Requests", style = MaterialTheme.typography.headlineSmall, color = Color(0xFF2E7D32), fontWeight = FontWeight.Bold)
-        Spacer(modifier = Modifier.height(16.dp))
-        if (currentJob != null) {
-            ActiveJobCard(currentJob!!)
-        } else {
-            LazyColumn { items(activeTrips) { trip -> TripCard(trip, driverName) } }
-        }
-    }
-}
-
-@Composable
-fun DeliveryDashboard() {
-    // Fake Delivery Data for Demo
-    val orders = listOf("Order #101: Pizza (Bole)", "Order #102: Package (Shecha)")
-    
-    Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
-        Text("Delivery Jobs", style = MaterialTheme.typography.headlineSmall, color = Color(0xFFE65100), fontWeight = FontWeight.Bold)
-        Spacer(modifier = Modifier.height(16.dp))
-        
-        LazyColumn {
-            items(orders) { order ->
-                Card(
-                    modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
-                    colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF3E0))
+    MaterialTheme {
+        Surface(modifier = Modifier.fillMaxSize(), color = Color(0xFFE8F5E9)) {
+            Column(modifier = Modifier.fillMaxSize()) {
+                // HEADER
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(16.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.LocalShipping, null, tint = Color(0xFFE65100))
-                        Spacer(modifier = Modifier.width(16.dp))
-                        Text(order, style = MaterialTheme.typography.titleMedium)
+                    Text("Hi, $driverName", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    TextButton(onClick = { 
+                        prefs.edit().clear().apply()
+                        navController.navigate("login") { popUpTo(0) }
+                    }) { Text("Logout", color = Color.Red) }
+                }
+
+                // TABS
+                Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
+                    Button(
+                        onClick = { currentTab = 0 },
+                        modifier = Modifier.weight(1f),
+                        colors = ButtonDefaults.buttonColors(containerColor = if (currentTab == 0) Color(0xFF2E7D32) else Color.Gray)
+                    ) { Icon(Icons.Default.LocalTaxi, null); Spacer(modifier = Modifier.width(8.dp)); Text("TAXI") }
+                    
+                    Spacer(modifier = Modifier.width(8.dp))
+                    
+                    Button(
+                        onClick = { currentTab = 1 },
+                        modifier = Modifier.weight(1f),
+                        colors = ButtonDefaults.buttonColors(containerColor = if (currentTab == 1) Color(0xFFE65100) else Color.Gray)
+                    ) { Icon(Icons.Default.LocalShipping, null); Spacer(modifier = Modifier.width(8.dp)); Text("DELIVERY") }
+                }
+                
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // LIST
+                LazyColumn(modifier = Modifier.padding(horizontal = 16.dp)) {
+                    if (currentTab == 0) {
+                        items(taxiRequests) { trip -> TaxiCard(trip, driverName) }
+                    } else {
+                        items(deliveryRequests) { order -> DeliveryCard(order, driverName) }
                     }
                 }
             }
@@ -163,27 +147,34 @@ fun DeliveryDashboard() {
     }
 }
 
-// ... (Existing ActiveJobCard and TripCard functions needed here)
-// I will include a shortened version to ensure compilation
 @Composable
-fun ActiveJobCard(trip: Trip) {
-    Card(colors = CardDefaults.cardColors(containerColor = Color(0xFFC8E6C9))) {
+fun TaxiCard(trip: Trip, driverId: String) {
+    Card(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp), colors = CardDefaults.cardColors(containerColor = Color.White)) {
         Column(modifier = Modifier.padding(16.dp)) {
-            Text("CURRENT TRIP", fontWeight = FontWeight.Bold)
+            Text("🚕 Taxi Request", fontWeight = FontWeight.Bold, color = Color(0xFF2E7D32))
+            Text("Customer: ${trip.customerId}")
+            Text("From: ${trip.pickupLocation.address}")
             Text("To: ${trip.dropoffLocation.address}")
+            Button(onClick = { 
+                FirebaseDatabase.getInstance().getReference("trips").child(trip.tripId)
+                    .updateChildren(mapOf("status" to "ACCEPTED", "driverId" to driverId))
+            }, modifier = Modifier.fillMaxWidth(), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2E7D32))) { Text("ACCEPT RIDE") }
         }
     }
 }
 
 @Composable
-fun TripCard(trip: Trip, driverId: String) {
+fun DeliveryCard(order: DeliveryOrder, driverId: String) {
     Card(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp), colors = CardDefaults.cardColors(containerColor = Color.White)) {
         Column(modifier = Modifier.padding(16.dp)) {
-            Text("📍 ${trip.pickupLocation.address}")
+            Text("📦 Delivery Request", fontWeight = FontWeight.Bold, color = Color(0xFFE65100))
+            Text("Restaurant: ${order.restaurantName}")
+            Text("Customer: ${order.customerName}")
+            Text("Earnings: ${order.deliveryFee} ETB")
             Button(onClick = { 
-                FirebaseDatabase.getInstance().getReference("trips").child(trip.tripId)
+                FirebaseDatabase.getInstance().getReference("deliveries").child(order.orderId)
                     .updateChildren(mapOf("status" to "ACCEPTED", "driverId" to driverId))
-            }, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2E7D32))) { Text("ACCEPT") }
+            }, modifier = Modifier.fillMaxWidth(), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE65100))) { Text("ACCEPT DELIVERY") }
         }
     }
 }
