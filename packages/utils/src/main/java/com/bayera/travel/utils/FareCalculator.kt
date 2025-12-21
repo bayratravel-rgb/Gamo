@@ -19,7 +19,7 @@ object FareCalculator {
             VehicleType.BAJAJ -> 25.0
             VehicleType.POOL -> 15.0
             VehicleType.COMFORT -> 50.0
-            VehicleType.LUXURY -> 150.0 
+            VehicleType.LUXURY -> 150.0
         }
     }
 
