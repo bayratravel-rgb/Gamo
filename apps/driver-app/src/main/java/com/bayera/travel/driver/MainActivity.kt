@@ -11,11 +11,8 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
-// --- FIXED: ADDED ALL ICON IMPORTS ---
-import androidx.compose.material.icons.filled.LocalTaxi
-import androidx.compose.material.icons.filled.LocalShipping
-import androidx.compose.material.icons.filled.Navigation
 import androidx.compose.material.icons.filled.Place
+import androidx.compose.material.icons.filled.Navigation
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -35,8 +32,6 @@ import com.google.firebase.database.FirebaseDatabase
 import com.google.firebase.database.ValueEventListener
 import com.bayera.travel.common.models.Trip
 import com.bayera.travel.common.models.TripStatus
-import com.bayera.travel.common.models.DeliveryOrder
-import com.bayera.travel.common.models.DeliveryStatus
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -63,83 +58,69 @@ fun DashboardScreen(navController: NavController) {
     val prefs = context.getSharedPreferences("driver_prefs", Context.MODE_PRIVATE)
     val driverName = prefs.getString("name", "Driver") ?: "Driver"
     
-    // UI State: 0 = Taxi, 1 = Delivery
-    var currentTab by remember { mutableIntStateOf(0) }
-    
-    var taxiRequests by remember { mutableStateOf<List<Trip>>(emptyList()) }
-    var deliveryRequests by remember { mutableStateOf<List<DeliveryOrder>>(emptyList()) }
+    var activeTrips by remember { mutableStateOf<List<Trip>>(emptyList()) }
+    var currentJob by remember { mutableStateOf<Trip?>(null) }
 
-    // FETCH TAXI REQUESTS
     LaunchedEffect(Unit) {
-        val db = FirebaseDatabase.getInstance().getReference("trips")
-        db.addValueEventListener(object : ValueEventListener {
+        val database = FirebaseDatabase.getInstance()
+        val tripsRef = database.getReference("trips")
+
+        tripsRef.addValueEventListener(object : ValueEventListener {
             override fun onDataChange(snapshot: DataSnapshot) {
-                val list = mutableListOf<Trip>()
+                val trips = mutableListOf<Trip>()
+                var myJob: Trip? = null
+                
                 for (child in snapshot.children) {
-                    val t = child.getValue(Trip::class.java)
-                    if (t != null && t.status == TripStatus.REQUESTED) list.add(t)
+                    try {
+                        val trip = child.getValue(Trip::class.java)
+                        if (trip != null) {
+                            if (trip.driverId != null && trip.driverId!!.contains(driverName)) {
+                                if (trip.status != TripStatus.COMPLETED && trip.status != TripStatus.CANCELLED) {
+                                    myJob = trip
+                                }
+                            }
+                            if (trip.status == TripStatus.REQUESTED) {
+                                trips.add(trip)
+                            }
+                        }
+                    } catch (e: Exception) {}
                 }
-                taxiRequests = list.reversed()
+                activeTrips = trips.reversed()
+                currentJob = myJob
             }
-            override fun onCancelled(e: DatabaseError) {}
-        })
-        
-        // FETCH DELIVERY REQUESTS
-        val deliveryDb = FirebaseDatabase.getInstance().getReference("deliveries")
-        deliveryDb.addValueEventListener(object : ValueEventListener {
-            override fun onDataChange(snapshot: DataSnapshot) {
-                val list = mutableListOf<DeliveryOrder>()
-                for (child in snapshot.children) {
-                    val d = child.getValue(DeliveryOrder::class.java)
-                    if (d != null && d.status == DeliveryStatus.PENDING) list.add(d)
-                }
-                deliveryRequests = list.reversed()
-            }
-            override fun onCancelled(e: DatabaseError) {}
+            override fun onCancelled(error: DatabaseError) {}
         })
     }
 
     MaterialTheme {
         Surface(modifier = Modifier.fillMaxSize(), color = Color(0xFFE8F5E9)) {
-            Column(modifier = Modifier.fillMaxSize()) {
-                // HEADER
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(16.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
                     Text("Hi, $driverName", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    Spacer(modifier = Modifier.weight(1f))
                     TextButton(onClick = { 
                         prefs.edit().clear().apply()
                         navController.navigate("login") { popUpTo(0) }
                     }) { Text("Logout", color = Color.Red) }
                 }
 
-                // TABS
-                Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
-                    Button(
-                        onClick = { currentTab = 0 },
-                        modifier = Modifier.weight(1f),
-                        colors = ButtonDefaults.buttonColors(containerColor = if (currentTab == 0) Color(0xFF2E7D32) else Color.Gray)
-                    ) { Icon(Icons.Default.LocalTaxi, null); Spacer(modifier = Modifier.width(8.dp)); Text("TAXI") }
-                    
-                    Spacer(modifier = Modifier.width(8.dp))
-                    
-                    Button(
-                        onClick = { currentTab = 1 },
-                        modifier = Modifier.weight(1f),
-                        colors = ButtonDefaults.buttonColors(containerColor = if (currentTab == 1) Color(0xFFE65100) else Color.Gray)
-                    ) { Icon(Icons.Default.LocalShipping, null); Spacer(modifier = Modifier.width(8.dp)); Text("DELIVERY") }
-                }
-                
                 Spacer(modifier = Modifier.height(16.dp))
 
-                // LIST
-                LazyColumn(modifier = Modifier.padding(horizontal = 16.dp)) {
-                    if (currentTab == 0) {
-                        items(taxiRequests) { trip -> TaxiCard(trip, driverName) }
+                if (currentJob != null) {
+                    ActiveJobCard(currentJob!!)
+                } else {
+                    Text("Incoming Requests", style = MaterialTheme.typography.headlineSmall, color = Color(0xFF2E7D32), fontWeight = FontWeight.Bold)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    if (activeTrips.isEmpty()) {
+                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            Text("Searching...", style = MaterialTheme.typography.bodyLarge, color = Color.Gray)
+                        }
                     } else {
-                        items(deliveryRequests) { order -> DeliveryCard(order, driverName) }
+                        LazyColumn {
+                            items(activeTrips) { trip ->
+                                TripCard(trip, "$driverName")
+                            }
+                        }
                     }
                 }
             }
@@ -148,33 +129,91 @@ fun DashboardScreen(navController: NavController) {
 }
 
 @Composable
-fun TaxiCard(trip: Trip, driverId: String) {
-    Card(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp), colors = CardDefaults.cardColors(containerColor = Color.White)) {
+fun ActiveJobCard(trip: Trip) {
+    val context = LocalContext.current
+    val db = FirebaseDatabase.getInstance().getReference("trips").child(trip.tripId)
+    
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFFC8E6C9)), 
+        elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
+    ) {
         Column(modifier = Modifier.padding(16.dp)) {
-            Text("🚕 Taxi Request", fontWeight = FontWeight.Bold, color = Color(0xFF2E7D32))
-            Text("Customer: ${trip.customerId}")
-            Text("From: ${trip.pickupLocation.address}")
-            Text("To: ${trip.dropoffLocation.address}")
-            Button(onClick = { 
-                FirebaseDatabase.getInstance().getReference("trips").child(trip.tripId)
-                    .updateChildren(mapOf("status" to "ACCEPTED", "driverId" to driverId))
-            }, modifier = Modifier.fillMaxWidth(), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2E7D32))) { Text("ACCEPT RIDE") }
+            Text("CURRENT TRIP", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = Color(0xFF1B5E20))
+            Spacer(modifier = Modifier.height(8.dp))
+            
+            Text("👤 ${trip.customerId}")
+            Spacer(modifier = Modifier.height(4.dp))
+            Text("🟢 From: ${trip.pickupLocation.address}")
+            Text("🔴 To: ${trip.dropoffLocation.address}")
+            
+            if (trip.pickupNotes.isNotEmpty()) {
+                Text("📝 Note: ${trip.pickupNotes}", color = Color.Red, fontWeight = FontWeight.Bold)
+            }
+            
+            Spacer(modifier = Modifier.height(16.dp))
+            
+            if (trip.status == TripStatus.ACCEPTED) {
+                Button(
+                    onClick = { 
+                        val uri = "google.navigation:q=${trip.pickupLocation.lat},${trip.pickupLocation.lng}"
+                        startNav(context, uri)
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1976D2)),
+                    modifier = Modifier.fillMaxWidth()
+                ) { Icon(Icons.Default.Navigation, null); Spacer(modifier = Modifier.width(8.dp)); Text("NAVIGATE TO PICKUP") }
+                
+                Spacer(modifier = Modifier.height(8.dp))
+                Button(
+                    onClick = { db.child("status").setValue(TripStatus.IN_PROGRESS) },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2E7D32)),
+                    modifier = Modifier.fillMaxWidth()
+                ) { Text("START TRIP") }
+                
+            } else if (trip.status == TripStatus.IN_PROGRESS) {
+                Button(
+                    onClick = { 
+                        val uri = "google.navigation:q=${trip.dropoffLocation.lat},${trip.dropoffLocation.lng}"
+                        startNav(context, uri)
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFD32F2F)),
+                    modifier = Modifier.fillMaxWidth()
+                ) { Icon(Icons.Default.Navigation, null); Spacer(modifier = Modifier.width(8.dp)); Text("NAVIGATE TO DROP-OFF") }
+                
+                Spacer(modifier = Modifier.height(8.dp))
+                Button(
+                    onClick = { db.child("status").setValue(TripStatus.COMPLETED) },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color.Black),
+                    modifier = Modifier.fillMaxWidth()
+                ) { Text("COMPLETE TRIP") }
+            }
         }
     }
 }
 
+fun startNav(context: Context, uri: String) {
+    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(uri))
+    intent.setPackage("com.google.android.apps.maps")
+    try { context.startActivity(intent) } catch (e: Exception) {}
+}
+
 @Composable
-fun DeliveryCard(order: DeliveryOrder, driverId: String) {
+fun TripCard(trip: Trip, driverId: String) {
+    val context = LocalContext.current
     Card(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp), colors = CardDefaults.cardColors(containerColor = Color.White)) {
         Column(modifier = Modifier.padding(16.dp)) {
-            Text("📦 Delivery Request", fontWeight = FontWeight.Bold, color = Color(0xFFE65100))
-            Text("Restaurant: ${order.restaurantName}")
-            Text("Customer: ${order.customerName}")
-            Text("Earnings: ${order.deliveryFee} ETB")
-            Button(onClick = { 
-                FirebaseDatabase.getInstance().getReference("deliveries").child(order.orderId)
-                    .updateChildren(mapOf("status" to "ACCEPTED", "driverId" to driverId))
-            }, modifier = Modifier.fillMaxWidth(), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE65100))) { Text("ACCEPT DELIVERY") }
+            Text("👤 ${trip.customerId}", fontWeight = FontWeight.Bold)
+            Text("📍 ${trip.pickupLocation.address}")
+            Text("💰 ${trip.price} ETB", color = Color(0xFF2E7D32), fontWeight = FontWeight.Bold)
+            Spacer(modifier = Modifier.height(12.dp))
+            Button(
+                onClick = { 
+                     FirebaseDatabase.getInstance().getReference("trips").child(trip.tripId)
+                        .updateChildren(mapOf("status" to "ACCEPTED", "driverId" to driverId))
+                },
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2E7D32)),
+                modifier = Modifier.fillMaxWidth()
+            ) { Text("ACCEPT RIDE") }
         }
     }
 }
