@@ -8,8 +8,9 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Home // Replaced Hotel
-import androidx.compose.material.icons.filled.Place // Replaced LocalTaxi
+// FIXED: Explicit Imports
+import androidx.compose.material.icons.filled.Hotel
+import androidx.compose.material.icons.filled.LocalTaxi 
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -29,10 +30,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         try { FirebaseApp.initializeApp(this) } catch (e: Exception) {}
-
-        setContent {
-            HotelDashboard()
-        }
+        setContent { HotelDashboard() }
     }
 }
 
@@ -41,7 +39,7 @@ fun HotelDashboard() {
     val context = LocalContext.current
     var roomNumber by remember { mutableStateOf("") }
     var destination by remember { mutableStateOf("") }
-    val hotelName = "Haile Resort Arba Minch"
+    var hotelName by remember { mutableStateOf("Haile Resort Arba Minch") }
 
     MaterialTheme {
         Surface(modifier = Modifier.fillMaxSize(), color = Color(0xFFF3E5F5)) {
@@ -50,56 +48,34 @@ fun HotelDashboard() {
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center
             ) {
-                // FIXED: Used standard Home icon
-                Icon(Icons.Default.Home, contentDescription = null, tint = Color(0xFF6A1B9A), modifier = Modifier.size(64.dp))
+                Icon(Icons.Default.Hotel, contentDescription = null, tint = Color(0xFF6A1B9A), modifier = Modifier.size(64.dp))
                 Spacer(modifier = Modifier.height(16.dp))
-                
                 Text(hotelName, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold, color = Color(0xFF4A148C))
                 Text("Concierge Service", style = MaterialTheme.typography.titleMedium, color = Color.Gray)
-                
                 Spacer(modifier = Modifier.height(32.dp))
-
-                Card(
-                    colors = CardDefaults.cardColors(containerColor = Color.White),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
+                Card(colors = CardDefaults.cardColors(containerColor = Color.White), elevation = CardDefaults.cardElevation(defaultElevation = 4.dp), modifier = Modifier.fillMaxWidth()) {
                     Column(modifier = Modifier.padding(16.dp)) {
                         Text("Book Guest Ride", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
                         Spacer(modifier = Modifier.height(16.dp))
-                        
-                        OutlinedTextField(
-                            value = roomNumber, onValueChange = { roomNumber = it },
-                            label = { Text("Room Number / Guest Name") },
-                            modifier = Modifier.fillMaxWidth()
-                        )
+                        OutlinedTextField(value = roomNumber, onValueChange = { roomNumber = it }, label = { Text("Room Number") }, modifier = Modifier.fillMaxWidth())
                         Spacer(modifier = Modifier.height(12.dp))
-                        
-                        OutlinedTextField(
-                            value = destination, onValueChange = { destination = it },
-                            label = { Text("Destination (e.g. Airport)") },
-                            modifier = Modifier.fillMaxWidth()
-                        )
+                        OutlinedTextField(value = destination, onValueChange = { destination = it }, label = { Text("Destination") }, modifier = Modifier.fillMaxWidth())
                         Spacer(modifier = Modifier.height(24.dp))
-                        
                         Button(
                             onClick = {
                                 if (roomNumber.isNotEmpty() && destination.isNotEmpty()) {
                                     val db = FirebaseDatabase.getInstance().getReference("trips")
                                     val newId = UUID.randomUUID().toString()
-                                    
                                     val trip = Trip(
                                         tripId = newId,
-                                        customerId = "$hotelName (Guest: $roomNumber)",
+                                        customerId = "$hotelName (Room: $roomNumber)",
                                         pickupLocation = Location(6.0206, 37.5557, hotelName),
                                         dropoffLocation = Location(0.0, 0.0, destination),
                                         price = 200.0,
                                         status = TripStatus.REQUESTED
                                     )
-                                    
                                     db.child(newId).setValue(trip)
-                                    Toast.makeText(context, "Taxi Requested for Room $roomNumber", Toast.LENGTH_LONG).show()
-                                    
+                                    Toast.makeText(context, "Taxi Requested!", Toast.LENGTH_LONG).show()
                                     roomNumber = ""
                                     destination = ""
                                 }
@@ -107,8 +83,7 @@ fun HotelDashboard() {
                             colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF6A1B9A)),
                             modifier = Modifier.fillMaxWidth().height(50.dp)
                         ) {
-                            // FIXED: Used standard Place icon
-                            Icon(Icons.Default.Place, contentDescription = null)
+                            Icon(Icons.Default.LocalTaxi, contentDescription = null)
                             Spacer(modifier = Modifier.width(8.dp))
                             Text("CALL TAXI NOW")
                         }
