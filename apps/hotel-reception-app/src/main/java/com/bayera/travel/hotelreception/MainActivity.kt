@@ -4,16 +4,20 @@ import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-// FIXED IMPORTS: Using standard icons
-import androidx.compose.material.icons.filled.Home 
-import androidx.compose.material.icons.filled.DirectionsCar 
+// FIXED: Use standard icons that are always available
+import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Place
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.google.firebase.FirebaseApp
 import com.google.firebase.database.FirebaseDatabase
@@ -41,13 +45,13 @@ fun HotelDashboard() {
     var hotelName by remember { mutableStateOf("Haile Resort Arba Minch") }
 
     MaterialTheme {
-        Surface(modifier = Modifier.fillMaxSize(), color = Color(0xFFF3E5F5)) {
+        Surface(modifier = Modifier.fillMaxSize(), color = Color(0xFFF3E5F5)) { 
             Column(
                 modifier = Modifier.fillMaxSize().padding(24.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center
             ) {
-                // FIXED ICON: Home instead of Hotel
+                // Fixed Icon: Home instead of Hotel
                 Icon(Icons.Default.Home, contentDescription = null, tint = Color(0xFF6A1B9A), modifier = Modifier.size(64.dp))
                 Spacer(modifier = Modifier.height(16.dp))
                 
@@ -104,8 +108,8 @@ fun HotelDashboard() {
                             colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF6A1B9A)),
                             modifier = Modifier.fillMaxWidth().height(50.dp)
                         ) {
-                            // FIXED ICON: DirectionsCar instead of LocalTaxi
-                            Icon(Icons.Default.DirectionsCar, contentDescription = null)
+                            // Fixed Icon: Place instead of LocalTaxi
+                            Icon(Icons.Default.Place, contentDescription = null)
                             Spacer(modifier = Modifier.width(8.dp))
                             Text("CALL TAXI NOW")
                         }

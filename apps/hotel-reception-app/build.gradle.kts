@@ -1,7 +1,7 @@
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
-    id("com.google.gms.google-services") // Crucial Line
+    id("com.google.gms.google-services")
 }
 
 android {
@@ -41,4 +41,7 @@ dependencies {
     implementation("androidx.compose.ui:ui-graphics")
     implementation("androidx.compose.ui:ui-tooling-preview")
     implementation("androidx.compose.material3:material3")
+    
+    // --- ADDED: Icons Extended Library (Fixes the crash) ---
+    implementation("androidx.compose.material:material-icons-extended:1.5.4")
 }
