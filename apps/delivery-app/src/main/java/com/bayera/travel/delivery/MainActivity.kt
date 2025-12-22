@@ -10,8 +10,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-// FIXED: Explicit Imports
-import androidx.compose.material.icons.filled.LocalShipping
+// FIXED: Use standard ShoppingCart icon instead of LocalShipping
+import androidx.compose.material.icons.filled.ShoppingCart 
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -24,6 +24,7 @@ import androidx.compose.ui.unit.dp
 import com.google.firebase.FirebaseApp
 import java.util.UUID
 
+// Mock Data for UI Testing
 data class DeliveryOrder(
     val id: String,
     val restaurant: String,
@@ -36,13 +37,18 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         try { FirebaseApp.initializeApp(this) } catch (e: Exception) {}
-        setContent { DeliveryDashboard() }
+
+        setContent {
+            DeliveryDashboard()
+        }
     }
 }
 
 @Composable
 fun DeliveryDashboard() {
     val context = LocalContext.current
+    
+    // Fake Orders for UI Demo
     val orders = listOf(
         DeliveryOrder("DEL-101", "Burger House", "Yabu", 250.0, "PENDING"),
         DeliveryOrder("DEL-102", "Pizza Corner", "Kebede", 400.0, "PENDING"),
@@ -50,18 +56,23 @@ fun DeliveryDashboard() {
     )
 
     MaterialTheme {
-        Surface(modifier = Modifier.fillMaxSize(), color = Color(0xFFFFF3E0)) {
+        Surface(modifier = Modifier.fillMaxSize(), color = Color(0xFFFFF3E0)) { // Light Orange
             Column(modifier = Modifier.padding(16.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.LocalShipping, null, tint = Color(0xFFE65100), modifier = Modifier.size(32.dp))
+                    // FIXED ICON
+                    Icon(Icons.Default.ShoppingCart, null, tint = Color(0xFFE65100), modifier = Modifier.size(32.dp))
                     Spacer(modifier = Modifier.width(12.dp))
                     Text("Bayera Delivery", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold, color = Color(0xFFE65100))
                 }
+                
                 Spacer(modifier = Modifier.height(24.dp))
                 Text("New Orders", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
                 Spacer(modifier = Modifier.height(16.dp))
+
                 LazyColumn {
-                    items(orders) { order -> DeliveryCard(order) }
+                    items(orders) { order ->
+                        DeliveryCard(order)
+                    }
                 }
             }
         }
@@ -70,7 +81,11 @@ fun DeliveryDashboard() {
 
 @Composable
 fun DeliveryCard(order: DeliveryOrder) {
-    Card(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp), colors = CardDefaults.cardColors(containerColor = Color.White), elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)) {
+    Card(
+        modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+    ) {
         Column(modifier = Modifier.padding(16.dp)) {
             Row(horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
                 Text(order.restaurant, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
@@ -83,7 +98,13 @@ fun DeliveryCard(order: DeliveryOrder) {
                 Text("Customer: ${order.customer}", color = Color.Gray)
             }
             Spacer(modifier = Modifier.height(16.dp))
-            Button(onClick = { }, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE65100)), modifier = Modifier.fillMaxWidth()) { Text("ACCEPT DELIVERY") }
+            Button(
+                onClick = { /* TODO: Accept Logic */ },
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE65100)),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("ACCEPT DELIVERY")
+            }
         }
     }
 }
