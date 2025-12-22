@@ -9,9 +9,9 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.DirectionsCar // Use this instead of LocalTaxi
-import androidx.compose.material.icons.filled.ShoppingCart // Use this instead of LocalShipping
-import androidx.compose.material.icons.filled.Place
+// FIXED: Using only SAFE icons
+import androidx.compose.material.icons.filled.Place 
+import androidx.compose.material.icons.filled.ShoppingCart 
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -57,13 +57,14 @@ fun DriverSuperDashboard(navController: NavController) {
     val prefs = context.getSharedPreferences("driver_prefs", Context.MODE_PRIVATE)
     val driverName = prefs.getString("name", "Partner") ?: "Partner"
     
-    var selectedTab by remember { mutableIntStateOf(0) } // 0=Rides, 1=Delivery
+    var selectedTab by remember { mutableIntStateOf(0) } 
 
     Scaffold(
         bottomBar = {
             NavigationBar(containerColor = Color.White) {
                 NavigationBarItem(
-                    icon = { Icon(Icons.Default.DirectionsCar, null) },
+                    // FIXED ICON: Used 'Place' instead of 'DirectionsCar'
+                    icon = { Icon(Icons.Default.Place, null) },
                     label = { Text("Rides") },
                     selected = selectedTab == 0,
                     onClick = { selectedTab = 0 },
