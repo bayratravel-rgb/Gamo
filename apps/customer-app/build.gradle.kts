@@ -26,17 +26,23 @@ android {
 
 dependencies {
     implementation(project(":packages:shared-types"))
-    implementation(project(":packages:utils"))
+    
+    // --- ADDED: Coil for Image Loading ---
+    implementation("io.coil-kt:coil-compose:2.5.0")
 
-    // --- ADDED: Networking for Route Fetching ---
-    implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    // Navigation
+    implementation("androidx.navigation:navigation-compose:2.7.6")
 
-    // Standard Map & Firebase stuff
+    // Google Services
     implementation("com.google.android.gms:play-services-location:21.0.1")
     implementation("org.osmdroid:osmdroid-android:6.1.16")
+
+    // Firebase
     implementation(platform("com.google.firebase:firebase-bom:32.7.0"))
     implementation("com.google.firebase:firebase-database-ktx")
     implementation("com.google.firebase:firebase-common-ktx")
+
+    // UI
     implementation("androidx.core:core-ktx:1.12.0")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.6.2")
     implementation("androidx.activity:activity-compose:1.8.1")
@@ -45,6 +51,5 @@ dependencies {
     implementation("androidx.compose.ui:ui-graphics")
     implementation("androidx.compose.ui:ui-tooling-preview")
     implementation("androidx.compose.material3:material3")
-    implementation("androidx.navigation:navigation-compose:2.7.6")
     implementation("androidx.compose.material:material-icons-extended:1.5.4")
 }
