@@ -8,6 +8,8 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -59,8 +61,9 @@ fun RideScreen(navController: NavController) {
     val userName = prefs.getString("name", "User") ?: "User"
     val userPhone = prefs.getString("phone", "") ?: ""
     
-    val startGeo = GeoPoint(6.0206, 37.5557)
+    val startGeo = GeoPoint(6.0206, 37.5557) // Arba Minch
     
+    // UI State
     var step by remember { mutableIntStateOf(0) }
     var currentGeoPoint by remember { mutableStateOf(startGeo) }
     var pickupGeo by remember { mutableStateOf<GeoPoint?>(null) }
@@ -72,11 +75,14 @@ fun RideScreen(navController: NavController) {
     var isMapMoving by remember { mutableStateOf(false) }
     var routePoints by remember { mutableStateOf<List<GeoPoint>>(emptyList()) }
     var activeTrip by remember { mutableStateOf<Trip?>(null) }
+    
+    // Vehicle Selection
     var selectedVehicle by remember { mutableStateOf(VehicleType.BAJAJ) }
     
     var mapController: org.osmdroid.api.IMapController? by remember { mutableStateOf(null) }
     var mapViewRef: MapView? by remember { mutableStateOf(null) }
 
+    // Google Maps Tile Source
     val googleMaps = object : XYTileSource("Google", 0, 19, 256, ".png", arrayOf("https://mt0.google.com/vt/lyrs=m&x=")) {
         override fun getTileURLString(pMapTileIndex: Long): String {
             return baseUrl + MapTileIndex.getX(pMapTileIndex) + "&y=" + MapTileIndex.getY(pMapTileIndex) + "&z=" + MapTileIndex.getZoom(pMapTileIndex)
@@ -115,7 +121,7 @@ fun RideScreen(navController: NavController) {
             } catch (e: Exception) {}
         }
     }
-    
+
     fun refreshPrice() {
         if (pickupGeo != null && dropoffGeo != null) {
             val dist = FareCalculator.calculateDistance(pickupGeo!!.latitude, pickupGeo!!.longitude, dropoffGeo!!.latitude, dropoffGeo!!.longitude)
@@ -148,6 +154,7 @@ fun RideScreen(navController: NavController) {
             }
         }
     }
+
     val permissionLauncher = rememberLauncherForActivityResult(contract = ActivityResultContracts.RequestMultiplePermissions()) { 
         if (it[Manifest.permission.ACCESS_FINE_LOCATION] == true) zoomToUser() 
     }
@@ -224,11 +231,12 @@ fun RideScreen(navController: NavController) {
                 if (activeTrip?.status == TripStatus.ACCEPTED) {
                     Text("✅ Driver Found!", style = MaterialTheme.typography.headlineSmall, color = Color(0xFF2E7D32), fontWeight = FontWeight.Bold)
                     Text("Driver: ${activeTrip?.driverId}", style = MaterialTheme.typography.bodyLarge)
+                    Text("Vehicle: ${activeTrip?.vehicleType}", style = MaterialTheme.typography.bodyMedium, color = Color.Gray)
                 } else {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         CircularProgressIndicator(color = Color(0xFF1E88E5), modifier = Modifier.size(24.dp))
                         Spacer(modifier = Modifier.width(16.dp))
-                        Text("Finding you a driver...", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                        Text("Finding a ${selectedVehicle.name}...", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                     }
                     Spacer(modifier = Modifier.height(16.dp))
                     Button(onClick = { step = 0; activeTrip = null; pickupGeo = null; dropoffGeo = null; routePoints = emptyList() }, colors = ButtonDefaults.buttonColors(containerColor = Color.LightGray), modifier = Modifier.fillMaxWidth()) { Text("Cancel Request", color = Color.Black) }
@@ -237,12 +245,17 @@ fun RideScreen(navController: NavController) {
                 Text("Start Trip From?", style = MaterialTheme.typography.titleMedium, color = Color.Gray)
                 Text(addressText, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, maxLines = 1)
                 Spacer(modifier = Modifier.height(16.dp))
-                Button(onClick = { val center = mapViewRef?.mapCenter as? GeoPoint; if (center != null) { pickupGeo = center; pickupAddr = addressText; step = 1 } }, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2E7D32)), modifier = Modifier.fillMaxWidth().height(50.dp)) { Text("Set Pickup Here") }
+                Button(onClick = { 
+                    // FIX: Force Capture Center
+                    val center = mapViewRef?.mapCenter as? GeoPoint
+                    if (center != null) { pickupGeo = center; pickupAddr = addressText; step = 1 } 
+                }, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2E7D32)), modifier = Modifier.fillMaxWidth().height(50.dp)) { Text("Set Pickup Here") }
             } else if (step == 1) {
                 Text("Where to?", style = MaterialTheme.typography.titleMedium, color = Color.Gray)
                 Text(addressText, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, maxLines = 1)
                 Spacer(modifier = Modifier.height(16.dp))
                 Button(onClick = { 
+                    // FIX: Force Capture Center
                     val center = mapViewRef?.mapCenter as? GeoPoint
                     if (center != null) {
                         dropoffGeo = center; dropoffAddr = addressText
@@ -252,19 +265,43 @@ fun RideScreen(navController: NavController) {
                     }
                 }, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFD32F2F)), modifier = Modifier.fillMaxWidth().height(50.dp)) { Text("Set Destination Here") }
             } else if (step == 2) {
-                // --- VEHICLE SELECTION ---
-                // ... (Since I cannot paste the Vehicle list logic again here without truncation, I trust it's in your previous code. If not, ask me to re-generate the Vehicle Selector block!)
                 Text("Trip Summary", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-                Text("Total: $estimatedPrice ETB", style = MaterialTheme.typography.headlineMedium, color = Color(0xFF2E7D32), fontWeight = FontWeight.Bold)
+                Text("🟢 From: $pickupAddr")
+                Text("🔴 To: $dropoffAddr")
+                Spacer(modifier = Modifier.height(16.dp))
+                
+                // VEHICLE SELECTION
+                Text("Choose Vehicle", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    items(VehicleType.values()) { vehicle ->
+                        FilterChip(
+                            selected = selectedVehicle == vehicle,
+                            onClick = { selectedVehicle = vehicle; refreshPrice() },
+                            label = { Text(vehicle.name) },
+                            leadingIcon = { if (selectedVehicle == vehicle) Icon(Icons.Default.Check, null) }
+                        )
+                    }
+                }
+                
+                Spacer(modifier = Modifier.height(16.dp))
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Text("Total Price", color = Color.Gray)
+                    Text("$estimatedPrice ETB", style = MaterialTheme.typography.headlineMedium, color = Color(0xFF2E7D32), fontWeight = FontWeight.Bold)
+                }
                 Spacer(modifier = Modifier.height(24.dp))
                 Button(onClick = { 
                     val db = FirebaseDatabase.getInstance().getReference("trips")
                     val newId = UUID.randomUUID().toString()
-                    val trip = Trip(tripId = newId, customerId = "$userName ($userPhone)", pickupLocation = Location(pickupGeo!!.latitude, pickupGeo!!.longitude, pickupAddr), dropoffLocation = Location(dropoffGeo!!.latitude, dropoffGeo!!.longitude, dropoffAddr), price = estimatedPrice, status = TripStatus.REQUESTED, vehicleType = selectedVehicle)
+                    val trip = Trip(
+                        tripId = newId, customerId = "$userName ($userPhone)",
+                        pickupLocation = Location(pickupGeo!!.latitude, pickupGeo!!.longitude, pickupAddr),
+                        dropoffLocation = Location(dropoffGeo!!.latitude, dropoffGeo!!.longitude, dropoffAddr),
+                        price = estimatedPrice, status = TripStatus.REQUESTED, vehicleType = selectedVehicle
+                    )
                     db.child(newId).setValue(trip)
                     activeTrip = trip
                     step = 3 
-                }, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFDD835)), modifier = Modifier.fillMaxWidth().height(50.dp)) { Text("BOOK RIDE", color = Color.Black, fontWeight = FontWeight.Bold) }
+                }, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFDD835)), modifier = Modifier.fillMaxWidth().height(50.dp)) { Text("BOOK ${selectedVehicle.name}", color = Color.Black, fontWeight = FontWeight.Bold) }
             }
         }
     }
