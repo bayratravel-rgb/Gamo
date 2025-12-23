@@ -25,15 +25,17 @@ android {
 }
 
 dependencies {
+    // --- LINK SHARED MODULES ---
     implementation(project(":packages:shared-types"))
-    
-    // --- ADDED: Coil for Image Loading ---
+    implementation(project(":packages:utils"))  // <--- THIS WAS MISSING!
+
+    // Networking
+    implementation("com.squareup.okhttp3:okhttp:4.12.0")
+
+    // Image Loading
     implementation("io.coil-kt:coil-compose:2.5.0")
 
-    // Navigation
-    implementation("androidx.navigation:navigation-compose:2.7.6")
-
-    // Google Services
+    // Location & Maps
     implementation("com.google.android.gms:play-services-location:21.0.1")
     implementation("org.osmdroid:osmdroid-android:6.1.16")
 
@@ -42,7 +44,7 @@ dependencies {
     implementation("com.google.firebase:firebase-database-ktx")
     implementation("com.google.firebase:firebase-common-ktx")
 
-    // UI
+    // Core & UI
     implementation("androidx.core:core-ktx:1.12.0")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.6.2")
     implementation("androidx.activity:activity-compose:1.8.1")
@@ -51,5 +53,6 @@ dependencies {
     implementation("androidx.compose.ui:ui-graphics")
     implementation("androidx.compose.ui:ui-tooling-preview")
     implementation("androidx.compose.material3:material3")
+    implementation("androidx.navigation:navigation-compose:2.7.6")
     implementation("androidx.compose.material:material-icons-extended:1.5.4")
 }

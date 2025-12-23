@@ -1,5 +1,8 @@
 package com.bayera.travel.customer
 
+import com.bayera.travel.utils.FareCalculator
+package com.bayera.travel.customer
+
 import android.Manifest
 import android.content.pm.PackageManager
 import android.location.Geocoder
