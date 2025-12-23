@@ -28,7 +28,7 @@ import com.bayera.travel.common.models.Trip
 import com.bayera.travel.common.models.Location
 import com.bayera.travel.common.models.TripStatus
 import com.bayera.travel.common.models.VehicleType
-// FIXED: Explicitly Import FareCalculator
+// FIXED: Added missing import for FareCalculator
 import com.bayera.travel.utils.FareCalculator
 import com.google.android.gms.location.LocationServices
 import com.google.firebase.database.DataSnapshot
@@ -118,7 +118,7 @@ fun RideScreen(navController: NavController) {
             } catch (e: Exception) {}
         }
     }
-    
+
     fun refreshPrice() {
         if (pickupGeo != null && dropoffGeo != null) {
             val dist = FareCalculator.calculateDistance(pickupGeo!!.latitude, pickupGeo!!.longitude, dropoffGeo!!.latitude, dropoffGeo!!.longitude)
@@ -151,9 +151,7 @@ fun RideScreen(navController: NavController) {
             }
         }
     }
-    val permissionLauncher = rememberLauncherForActivityResult(contract = ActivityResultContracts.RequestMultiplePermissions()) { 
-        if (it[Manifest.permission.ACCESS_FINE_LOCATION] == true) zoomToUser() 
-    }
+    val permissionLauncher = rememberLauncherForActivityResult(contract = ActivityResultContracts.RequestMultiplePermissions()) { if (it[Manifest.permission.ACCESS_FINE_LOCATION] == true) zoomToUser() }
     LaunchedEffect(Unit) {
         if (ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) zoomToUser()
         else permissionLauncher.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION))
@@ -227,7 +225,6 @@ fun RideScreen(navController: NavController) {
                 if (activeTrip?.status == TripStatus.ACCEPTED) {
                     Text("✅ Driver Found!", style = MaterialTheme.typography.headlineSmall, color = Color(0xFF2E7D32), fontWeight = FontWeight.Bold)
                     Text("Driver: ${activeTrip?.driverId}", style = MaterialTheme.typography.bodyLarge)
-                    Text("Vehicle: ${activeTrip?.vehicleType}", style = MaterialTheme.typography.bodyMedium, color = Color.Gray)
                 } else {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         CircularProgressIndicator(color = Color(0xFF1E88E5), modifier = Modifier.size(24.dp))
@@ -257,9 +254,7 @@ fun RideScreen(navController: NavController) {
                 }, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFD32F2F)), modifier = Modifier.fillMaxWidth().height(50.dp)) { Text("Set Destination Here") }
             } else if (step == 2) {
                 Text("Trip Summary", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-                Text("Total: $estimatedPrice ETB", style = MaterialTheme.typography.headlineMedium, color = Color(0xFF2E7D32), fontWeight = FontWeight.Bold)
                 
-                // Vehicle Selector
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(vertical = 16.dp)) {
                     items(VehicleType.values()) { vehicle ->
                         FilterChip(
@@ -270,7 +265,12 @@ fun RideScreen(navController: NavController) {
                         )
                     }
                 }
-
+                
+                Spacer(modifier = Modifier.height(16.dp))
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Text("Total Price", color = Color.Gray)
+                    Text("$estimatedPrice ETB", style = MaterialTheme.typography.headlineMedium, color = Color(0xFF2E7D32), fontWeight = FontWeight.Bold)
+                }
                 Spacer(modifier = Modifier.height(24.dp))
                 Button(onClick = { 
                     val db = FirebaseDatabase.getInstance().getReference("trips")
