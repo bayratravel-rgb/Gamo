@@ -39,18 +39,12 @@ class MainActivity : ComponentActivity() {
 
             NavHost(navController = navController, startDestination = startScreen) {
                 composable("login") { LoginScreen(navController) }
-                
-                // NEW: Super App Home
                 composable("super_home") { SuperAppHome(navController) }
-                
-                // Ride Feature (The Map)
                 composable("ride_home") { RideScreen(navController) }
-                
-                // Delivery Feature (Coming Soon)
-                composable("delivery_home") { DeliveryScreen(navController) }
-                
+                composable("delivery_home") { DeliveryScreen(navController) } // Now uses external file
                 composable("profile") { ProfileScreen(navController) }
                 composable("settings") { SettingsScreen(navController) }
+                composable("history") { HistoryScreen(navController) }
             }
         }
     }
@@ -72,6 +66,12 @@ fun SuperAppHome(navController: NavController) {
                     onClick = { }
                 )
                 NavigationBarItem(
+                    icon = { Icon(Icons.Default.History, null) },
+                    label = { Text("Activity") },
+                    selected = false,
+                    onClick = { navController.navigate("history") }
+                )
+                NavigationBarItem(
                     icon = { Icon(Icons.Default.Person, null) },
                     label = { Text("Account") },
                     selected = false,
@@ -87,7 +87,6 @@ fun SuperAppHome(navController: NavController) {
                 .background(Color(0xFFF5F5F5))
                 .padding(16.dp)
         ) {
-            // Header
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text("Hi, $userName!", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
                 Spacer(modifier = Modifier.weight(1f))
@@ -100,26 +99,9 @@ fun SuperAppHome(navController: NavController) {
             Text("Services", style = MaterialTheme.typography.titleMedium, color = Color.Gray)
             Spacer(modifier = Modifier.height(16.dp))
 
-            // SERVICE GRID
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                
-                // 1. RIDE (Taxi)
-                ServiceCard(
-                    title = "Ride",
-                    icon = Icons.Default.LocalTaxi,
-                    color = Color(0xFFE3F2FD), // Light Blue
-                    iconColor = Color(0xFF1E88E5),
-                    onClick = { navController.navigate("ride_home") }
-                )
-                
-                // 2. DELIVERY (Food/Package)
-                ServiceCard(
-                    title = "Delivery",
-                    icon = Icons.Default.ShoppingCart, // Safe Icon
-                    color = Color(0xFFFFF3E0), // Light Orange
-                    iconColor = Color(0xFFE65100),
-                    onClick = { navController.navigate("delivery_home") }
-                )
+                ServiceCard("Ride", Icons.Default.LocalTaxi, Color(0xFFE3F2FD), Color(0xFF1E88E5)) { navController.navigate("ride_home") }
+                ServiceCard("Delivery", Icons.Default.ShoppingCart, Color(0xFFFFF3E0), Color(0xFFE65100)) { navController.navigate("delivery_home") }
             }
         }
     }
@@ -142,14 +124,5 @@ fun ServiceCard(title: String, icon: androidx.compose.ui.graphics.vector.ImageVe
             Spacer(modifier = Modifier.height(8.dp))
             Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
         }
-    }
-}
-
-// Placeholder for Delivery
-@Composable
-fun DeliveryScreen(navController: NavController) {
-    Column(modifier = Modifier.fillMaxSize(), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
-        Text("Food Delivery Coming Soon!")
-        Button(onClick = { navController.popBackStack() }) { Text("Back") }
     }
 }
