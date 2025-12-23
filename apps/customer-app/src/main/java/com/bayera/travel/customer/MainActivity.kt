@@ -28,8 +28,6 @@ import org.osmdroid.config.Configuration
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        try { FirebaseApp.initializeApp(this) } catch (e: Exception) {}
-        Configuration.getInstance().userAgentValue = packageName
 
         setContent {
             val navController = rememberNavController()
