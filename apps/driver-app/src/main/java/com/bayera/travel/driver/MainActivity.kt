@@ -15,7 +15,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.material.icons.filled.ArrowForward
-import androidx.compose.material.icons.filled.Fastfood
+import androidx.compose.material.icons.filled.Person
+// REMOVED Fastfood
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -100,14 +101,69 @@ fun DriverSuperDashboard(navController: NavController) {
                     navController.navigate("login") { popUpTo(0) }
                 }) { Text("Logout", color = Color.Red) }
             }
+            
             Spacer(modifier = Modifier.height(16.dp))
 
-            if (selectedTab == 0) RideRequestsScreen(driverName) else DeliveryRequestsScreen(driverName)
+            if (selectedTab == 0) {
+                RideRequestsScreen(driverName)
+            } else {
+                DeliveryRequestsScreen(driverName)
+            }
         }
     }
 }
 
-// --- DELIVERY TAB LOGIC ---
+@Composable
+fun RideRequestsScreen(driverName: String) {
+    var activeTrips by remember { mutableStateOf<List<Trip>>(emptyList()) }
+    var currentJob by remember { mutableStateOf<Trip?>(null) }
+    
+    LaunchedEffect(Unit) {
+        val db = FirebaseDatabase.getInstance().getReference("trips")
+        db.addValueEventListener(object : ValueEventListener {
+            override fun onDataChange(snapshot: DataSnapshot) {
+                val trips = mutableListOf<Trip>()
+                var myJob: Trip? = null
+                for (child in snapshot.children) {
+                    try {
+                        val trip = child.getValue(Trip::class.java)
+                        if (trip != null) {
+                            if (trip.driverId != null && trip.driverId!!.contains(driverName)) {
+                                if (trip.status != TripStatus.COMPLETED && trip.status != TripStatus.CANCELLED) {
+                                    myJob = trip
+                                }
+                            }
+                            if (trip.status == TripStatus.REQUESTED) {
+                                trips.add(trip)
+                            }
+                        }
+                    } catch (e: Exception) {}
+                }
+                activeTrips = trips.reversed()
+                currentJob = myJob
+            }
+            override fun onCancelled(e: DatabaseError) {}
+        })
+    }
+
+    if (currentJob != null) {
+        ActiveJobCard(currentJob!!)
+    } else {
+        Text("Incoming Rides", style = MaterialTheme.typography.headlineSmall, color = Color(0xFF2E7D32), fontWeight = FontWeight.Bold)
+        Spacer(modifier = Modifier.height(16.dp))
+        
+        if (activeTrips.isEmpty()) {
+            Text("Waiting for rides...", color = Color.Gray)
+        } else {
+            LazyColumn {
+                items(activeTrips) { trip ->
+                    RideCard(trip, driverName)
+                }
+            }
+        }
+    }
+}
+
 @Composable
 fun DeliveryRequestsScreen(driverName: String) {
     var orders by remember { mutableStateOf<List<Delivery>>(emptyList()) }
@@ -131,7 +187,7 @@ fun DeliveryRequestsScreen(driverName: String) {
         })
     }
 
-    Text("Incoming Food Orders", style = MaterialTheme.typography.headlineSmall, color = Color(0xFFE65100), fontWeight = FontWeight.Bold)
+    Text("Incoming Deliveries", style = MaterialTheme.typography.headlineSmall, color = Color(0xFFE65100), fontWeight = FontWeight.Bold)
     Spacer(modifier = Modifier.height(16.dp))
 
     if (orders.isEmpty()) {
@@ -151,7 +207,8 @@ fun DeliveryOrderCard(order: Delivery, driverName: String) {
     Card(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp), colors = CardDefaults.cardColors(containerColor = Color.White)) {
         Column(modifier = Modifier.padding(16.dp)) {
             Row {
-                Icon(Icons.Default.Fastfood, null, tint = Color(0xFFE65100))
+                // FIXED ICON: ShoppingCart
+                Icon(Icons.Default.ShoppingCart, null, tint = Color(0xFFE65100))
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(order.restaurantName, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
             }
@@ -174,58 +231,56 @@ fun DeliveryOrderCard(order: Delivery, driverName: String) {
     }
 }
 
-// --- RIDE LOGIC (Minified to save space, assuming it's the same as before) ---
-@Composable
-fun RideRequestsScreen(driverName: String) {
-    var activeTrips by remember { mutableStateOf<List<Trip>>(emptyList()) }
-    var currentJob by remember { mutableStateOf<Trip?>(null) }
-    LaunchedEffect(Unit) {
-        FirebaseDatabase.getInstance().getReference("trips").addValueEventListener(object : ValueEventListener {
-            override fun onDataChange(snapshot: DataSnapshot) {
-                val trips = mutableListOf<Trip>()
-                var myJob: Trip? = null
-                for (child in snapshot.children) {
-                    val trip = child.getValue(Trip::class.java)
-                    if (trip != null) {
-                        if (trip.driverId != null && trip.driverId!!.contains(driverName) && trip.status != TripStatus.COMPLETED) myJob = trip
-                        if (trip.status == TripStatus.REQUESTED) trips.add(trip)
-                    }
-                }
-                activeTrips = trips.reversed()
-                currentJob = myJob
-            }
-            override fun onCancelled(e: DatabaseError) {}
-        })
-    }
-
-    if (currentJob != null) {
-        ActiveJobCard(currentJob!!)
-    } else {
-        Text("Incoming Rides", style = MaterialTheme.typography.headlineSmall, color = Color(0xFF2E7D32), fontWeight = FontWeight.Bold)
-        LazyColumn { items(activeTrips) { trip -> RideCard(trip, driverName) } }
-    }
-}
-
 @Composable
 fun RideCard(trip: Trip, driverId: String) {
+    val context = LocalContext.current
     Card(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp), colors = CardDefaults.cardColors(containerColor = Color.White)) {
         Column(modifier = Modifier.padding(16.dp)) {
+            Text("👤 ${trip.customerId}", fontWeight = FontWeight.Bold)
             Text("📍 ${trip.pickupLocation.address}")
-            Text("💰 ${trip.price} ETB")
-            Button(onClick = { 
-                FirebaseDatabase.getInstance().getReference("trips").child(trip.tripId)
-                   .updateChildren(mapOf("status" to "ACCEPTED", "driverId" to driverId))
-            }, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2E7D32)), modifier = Modifier.fillMaxWidth()) { Text("ACCEPT RIDE") }
+            Text("💰 ${trip.price} ETB", color = Color(0xFF2E7D32), fontWeight = FontWeight.Bold)
+            Spacer(modifier = Modifier.height(12.dp))
+            Button(
+                onClick = { 
+                    val db = FirebaseDatabase.getInstance().getReference("trips").child(trip.tripId)
+                    db.updateChildren(mapOf("status" to "ACCEPTED", "driverId" to driverId))
+                    Toast.makeText(context, "Accepted!", Toast.LENGTH_SHORT).show()
+                },
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2E7D32)),
+                modifier = Modifier.fillMaxWidth()
+            ) { Text("ACCEPT RIDE") }
         }
     }
 }
 
 @Composable
 fun ActiveJobCard(trip: Trip) {
+    val context = LocalContext.current
+    val db = FirebaseDatabase.getInstance().getReference("trips").child(trip.tripId)
+    
     Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Color(0xFFC8E6C9))) {
         Column(modifier = Modifier.padding(16.dp)) {
             Text("CURRENT TRIP", fontWeight = FontWeight.Bold)
             Text("To: ${trip.dropoffLocation.address}")
+            Spacer(modifier = Modifier.height(16.dp))
+            Button(
+                onClick = { 
+                    val uri = "google.navigation:q=${trip.pickupLocation.lat},${trip.pickupLocation.lng}"
+                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(uri))
+                    intent.setPackage("com.google.android.apps.maps")
+                    try { context.startActivity(intent) } catch(e: Exception) {}
+                },
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1976D2)),
+                modifier = Modifier.fillMaxWidth()
+            ) { Icon(Icons.Default.ArrowForward, null); Spacer(modifier = Modifier.width(8.dp)); Text("NAVIGATE") }
+            
+            Spacer(modifier = Modifier.height(8.dp))
+            
+            if (trip.status == TripStatus.ACCEPTED) {
+                Button(onClick = { db.child("status").setValue(TripStatus.IN_PROGRESS) }, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2E7D32)), modifier = Modifier.fillMaxWidth()) { Text("START TRIP") }
+            } else {
+                Button(onClick = { db.child("status").setValue(TripStatus.COMPLETED) }, colors = ButtonDefaults.buttonColors(containerColor = Color.Black), modifier = Modifier.fillMaxWidth()) { Text("COMPLETE TRIP") }
+            }
         }
     }
 }
