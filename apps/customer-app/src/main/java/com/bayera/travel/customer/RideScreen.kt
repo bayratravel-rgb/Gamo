@@ -8,6 +8,8 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -26,7 +28,7 @@ import com.bayera.travel.common.models.Trip
 import com.bayera.travel.common.models.Location
 import com.bayera.travel.common.models.TripStatus
 import com.bayera.travel.common.models.VehicleType
-// FIXED: Ensure this import exists
+// FIXED: Explicitly Import FareCalculator
 import com.bayera.travel.utils.FareCalculator
 import com.google.android.gms.location.LocationServices
 import com.google.firebase.database.DataSnapshot
@@ -225,6 +227,7 @@ fun RideScreen(navController: NavController) {
                 if (activeTrip?.status == TripStatus.ACCEPTED) {
                     Text("✅ Driver Found!", style = MaterialTheme.typography.headlineSmall, color = Color(0xFF2E7D32), fontWeight = FontWeight.Bold)
                     Text("Driver: ${activeTrip?.driverId}", style = MaterialTheme.typography.bodyLarge)
+                    Text("Vehicle: ${activeTrip?.vehicleType}", style = MaterialTheme.typography.bodyMedium, color = Color.Gray)
                 } else {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         CircularProgressIndicator(color = Color(0xFF1E88E5), modifier = Modifier.size(24.dp))
@@ -255,6 +258,19 @@ fun RideScreen(navController: NavController) {
             } else if (step == 2) {
                 Text("Trip Summary", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
                 Text("Total: $estimatedPrice ETB", style = MaterialTheme.typography.headlineMedium, color = Color(0xFF2E7D32), fontWeight = FontWeight.Bold)
+                
+                // Vehicle Selector
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(vertical = 16.dp)) {
+                    items(VehicleType.values()) { vehicle ->
+                        FilterChip(
+                            selected = selectedVehicle == vehicle,
+                            onClick = { selectedVehicle = vehicle; refreshPrice() },
+                            label = { Text(vehicle.name) },
+                            leadingIcon = { if (selectedVehicle == vehicle) Icon(Icons.Default.Check, null) }
+                        )
+                    }
+                }
+
                 Spacer(modifier = Modifier.height(24.dp))
                 Button(onClick = { 
                     val db = FirebaseDatabase.getInstance().getReference("trips")
