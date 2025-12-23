@@ -27,25 +27,6 @@
     },
     {
       "client_info": {
-        "mobilesdk_app_id": "1:643765664968:android:c3ff46bab948be785af9fd",
-        "android_client_info": {
-          "package_name": "com.bayera.travel.delivery"
-        }
-      },
-      "oauth_client": [],
-      "api_key": [
-        {
-          "current_key": "AIzaSyCuzSPe6f4JoQYuYS-JskaHT11jKNEuA20"
-        }
-      ],
-      "services": {
-        "appinvite_service": {
-          "other_platform_oauth_client": []
-        }
-      }
-    },
-    {
-      "client_info": {
         "mobilesdk_app_id": "1:643765664968:android:656f004fce2ecda85af9fd",
         "android_client_info": {
           "package_name": "com.bayera.travel.driver"
@@ -68,6 +49,25 @@
         "mobilesdk_app_id": "1:643765664968:android:546456cb33166c865af9fd",
         "android_client_info": {
           "package_name": "com.bayera.travel.hotelreception"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCuzSPe6f4JoQYuYS-JskaHT11jKNEuA20"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:643765664968:android:01cb3b1afae937b35af9fd",
+        "android_client_info": {
+          "package_name": "com.bayera.travel.merchant"
         }
       },
       "oauth_client": [],
