@@ -1,8 +1,5 @@
 package com.bayera.travel.customer
 
-import com.bayera.travel.utils.FareCalculator
-package com.bayera.travel.customer
-
 import android.Manifest
 import android.content.pm.PackageManager
 import android.location.Geocoder
@@ -31,7 +28,6 @@ import com.bayera.travel.common.models.Trip
 import com.bayera.travel.common.models.Location
 import com.bayera.travel.common.models.TripStatus
 import com.bayera.travel.common.models.VehicleType
-// FIXED: Added missing import for FareCalculator
 import com.bayera.travel.utils.FareCalculator
 import com.google.android.gms.location.LocationServices
 import com.google.firebase.database.DataSnapshot
@@ -154,7 +150,9 @@ fun RideScreen(navController: NavController) {
             }
         }
     }
-    val permissionLauncher = rememberLauncherForActivityResult(contract = ActivityResultContracts.RequestMultiplePermissions()) { if (it[Manifest.permission.ACCESS_FINE_LOCATION] == true) zoomToUser() }
+    val permissionLauncher = rememberLauncherForActivityResult(contract = ActivityResultContracts.RequestMultiplePermissions()) { 
+        if (it[Manifest.permission.ACCESS_FINE_LOCATION] == true) zoomToUser() 
+    }
     LaunchedEffect(Unit) {
         if (ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) zoomToUser()
         else permissionLauncher.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION))
@@ -228,6 +226,7 @@ fun RideScreen(navController: NavController) {
                 if (activeTrip?.status == TripStatus.ACCEPTED) {
                     Text("✅ Driver Found!", style = MaterialTheme.typography.headlineSmall, color = Color(0xFF2E7D32), fontWeight = FontWeight.Bold)
                     Text("Driver: ${activeTrip?.driverId}", style = MaterialTheme.typography.bodyLarge)
+                    Text("Vehicle: ${activeTrip?.vehicleType}", style = MaterialTheme.typography.bodyMedium, color = Color.Gray)
                 } else {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         CircularProgressIndicator(color = Color(0xFF1E88E5), modifier = Modifier.size(24.dp))
