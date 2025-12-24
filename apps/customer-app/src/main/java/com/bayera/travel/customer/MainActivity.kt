@@ -7,6 +7,7 @@ import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -38,7 +39,6 @@ class MainActivity : ComponentActivity() {
             val context = LocalContext.current
             val prefs = context.getSharedPreferences("user_prefs", Context.MODE_PRIVATE)
             
-            // Check Dark Mode
             val isSystemDark = androidx.compose.foundation.isSystemInDarkTheme()
             val isDarkTheme = prefs.getBoolean("dark_mode", isSystemDark)
             val colors = if (isDarkTheme) darkColorScheme() else lightColorScheme()
@@ -50,17 +50,17 @@ class MainActivity : ComponentActivity() {
                     composable("login") { LoginScreen(navController) }
                     composable("super_home") { SuperAppHome(navController) }
                     composable("ride_home") { RideScreen(navController) }
-                    composable("delivery_home") { DeliveryScreen(navController) } // External File
-                    composable("profile") { ProfileScreen(navController) } // External File
-                    composable("settings") { SettingsScreen(navController) } // External File
-                    composable("history") { HistoryScreen(navController) } // External File
+                    composable("delivery_home") { DeliveryScreen(navController) }
+                    composable("hotel_home") { HotelScreen(navController) }
+                    composable("profile") { ProfileScreen(navController) }
+                    composable("settings") { SettingsScreen(navController) } // Now passing controller only, logic inside screen
+                    composable("history") { HistoryScreen(navController) }
                 }
             }
         }
     }
 }
 
-// --- SUPER APP DASHBOARD ---
 @Composable
 fun SuperAppHome(navController: NavController) {
     val context = LocalContext.current
@@ -88,6 +88,7 @@ fun SuperAppHome(navController: NavController) {
                 Spacer(modifier = Modifier.weight(1f))
                 IconButton(onClick = { navController.navigate("settings") }) { Icon(Icons.Default.Settings, null) }
             }
+
             Spacer(modifier = Modifier.height(24.dp))
             Text("Services", style = MaterialTheme.typography.titleMedium, color = Color.Gray)
             Spacer(modifier = Modifier.height(16.dp))
@@ -96,6 +97,28 @@ fun SuperAppHome(navController: NavController) {
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 ServiceCard("Ride", Icons.Default.LocalTaxi, Color(0xFFE3F2FD), Color(0xFF1E88E5)) { navController.navigate("ride_home") }
                 ServiceCard("Delivery", Icons.Default.ShoppingCart, Color(0xFFFFF3E0), Color(0xFFE65100)) { navController.navigate("delivery_home") }
+            }
+            
+            Spacer(modifier = Modifier.height(16.dp))
+            
+            // --- ADDED HOTEL BUTTON ---
+            Card(
+                modifier = Modifier.fillMaxWidth().height(100.dp).clickable { navController.navigate("hotel_home") },
+                colors = CardDefaults.cardColors(containerColor = Color(0xFFF3E5F5)), // Purple
+                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxSize().padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    // Use 'Home' or 'Hotel' if available, defaulting to Home for safety
+                    Icon(Icons.Default.Home, null, tint = Color(0xFF6A1B9A), modifier = Modifier.size(40.dp))
+                    Spacer(modifier = Modifier.width(16.dp))
+                    Column {
+                        Text("Hotels & Resorts", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = Color(0xFF4A148C))
+                        Text("Book your stay", style = MaterialTheme.typography.bodyMedium, color = Color.Gray)
+                    }
+                }
             }
         }
     }
