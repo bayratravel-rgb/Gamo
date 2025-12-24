@@ -58,3 +58,4 @@ jobs:
       with:
         name: MERCHANT-APP
         path: apps/merchant-app/build/outputs/apk/debug/*.apk
+# Trigger new build
