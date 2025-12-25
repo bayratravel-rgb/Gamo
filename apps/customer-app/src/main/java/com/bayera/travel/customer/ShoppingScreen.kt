@@ -1,6 +1,7 @@
 package com.bayera.travel.customer
 
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
@@ -61,7 +62,14 @@ fun ShoppingScreen(navController: NavController) {
     ) { padding ->
         Column(modifier = Modifier.padding(padding).padding(16.dp)) {
             // Category Chips
-            ScrollableTabRow(selectedTabIndex = categories.indexOf(selectedCategory), edgePadding = 0.dp, containerColor = Color.Transparent, contentColor = MaterialTheme.colorScheme.primary) {
+            ScrollableTabRow(
+                selectedTabIndex = categories.indexOf(selectedCategory),
+                edgePadding = 0.dp,
+                containerColor = Color.Transparent,
+                contentColor = MaterialTheme.colorScheme.primary,
+                indicator = {},
+                divider = {}
+            ) {
                 categories.forEach { category ->
                     Tab(
                         selected = selectedCategory == category,
@@ -78,7 +86,11 @@ fun ShoppingScreen(navController: NavController) {
                     Text("No items found in $selectedCategory", color = Color.Gray)
                 }
             } else {
-                LazyVerticalGrid(columns = GridCells.Fixed(2), horizontalArrangement = Arrangement.spacedBy(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                LazyVerticalGrid(
+                    columns = GridCells.Fixed(2),
+                    horizontalArrangement = Arrangement.spacedBy(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
                     items(filteredProducts) { product ->
                         ProductCard(product)
                     }
