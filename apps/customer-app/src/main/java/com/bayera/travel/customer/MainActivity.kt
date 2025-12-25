@@ -50,7 +50,7 @@ class MainActivity : ComponentActivity() {
                     composable("login") { LoginScreen(navController) }
                     composable("super_home") { SuperAppHome(navController) }
                     composable("ride_home") { RideScreen(navController) }
-                    composable("delivery_home") { DeliveryScreen(navController) }
+                    composable("delivery_home") { ShoppingScreen(navController) }
                     composable("profile") { ProfileScreen(navController) }
                     composable("settings") { SettingsScreen(navController) }
                     composable("history") { HistoryScreen(navController) }
@@ -92,7 +92,7 @@ fun SuperAppHome(navController: NavController) {
             Spacer(modifier = Modifier.height(16.dp))
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 ServiceCard("Ride", Icons.Default.LocalTaxi, Color(0xFFE3F2FD), Color(0xFF1E88E5)) { navController.navigate("ride_home") }
-                ServiceCard("Delivery", Icons.Default.ShoppingCart, Color(0xFFFFF3E0), Color(0xFFE65100)) { navController.navigate("delivery_home") }
+                ServiceCard("Shopping", Icons.Default.ShoppingCart, Color(0xFFFFF3E0), Color(0xFFE65100)) { navController.navigate("delivery_home") }
             }
         }
     }
