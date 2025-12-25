@@ -15,18 +15,16 @@ dependencyResolutionManagement {
 
 rootProject.name = "BayeraTravel"
 
-// --- APPS ---
+// APPS
 include(":apps:customer-app")
 include(":apps:driver-app")
 include(":apps:delivery-app")
 include(":apps:hotel-reception-app")
+include(":apps:merchant-app")
 
-// --- SHARED MODULES ---
+// PACKAGES
 include(":packages:shared-types")
+include(":packages:utils")
+include(":packages:data-layer")
 include(":packages:api-client")
 include(":packages:ui-components")
-include(":packages:data-layer")
-include(":packages:utils")
-
-// --- BACKEND (Optional for Android Build, but keeping in tree) ---
-// include(":backend:ktor-server") 
