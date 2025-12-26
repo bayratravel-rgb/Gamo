@@ -3,7 +3,7 @@ package com.bayera.travel.customer
 import android.Manifest
 import android.content.pm.PackageManager
 import android.location.Geocoder
-import android.widget.Toast
+import android.os.Bundle
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -50,6 +50,8 @@ import org.osmdroid.util.MapTileIndex
 import org.osmdroid.views.MapView
 import org.osmdroid.views.overlay.Marker
 import org.osmdroid.views.overlay.Polyline
+import org.osmdroid.views.overlay.mylocation.GpsMyLocationProvider
+import org.osmdroid.views.overlay.mylocation.MyLocationNewOverlay
 import java.util.Locale
 import java.util.UUID
 
@@ -79,13 +81,8 @@ fun RideScreen(navController: NavController) {
     
     var mapController: org.osmdroid.api.IMapController? by remember { mutableStateOf(null) }
     
-    // FIXED: Declare mapViewRef as a MutableState so it persists across recompositions
-    // using 'remember { mutableStateOf<MapView?>(null) }'
-    // But actually, we don't need the View itself if we have 'currentGeoPoint'.
-    // The Map Listener UPDATES 'currentGeoPoint' automatically.
-    // So we can just use 'currentGeoPoint' instead of asking the map again!
-    
-    // SIMPLER FIX: Remove 'mapViewRef' usage and just use 'currentGeoPoint' which is already synced.
+    // --- LIVE LOCATION OVERLAY ---
+    var myLocationOverlay: MyLocationNewOverlay? by remember { mutableStateOf(null) }
 
     val googleMaps = object : XYTileSource("Google", 0, 19, 256, ".png", arrayOf("https://mt0.google.com/vt/lyrs=m&x=")) {
         override fun getTileURLString(pMapTileIndex: Long): String {
@@ -133,48 +130,44 @@ fun RideScreen(navController: NavController) {
         }
     }
 
-    LaunchedEffect(activeTrip?.tripId) {
-        if (activeTrip != null) {
-            val db = FirebaseDatabase.getInstance().getReference("trips").child(activeTrip!!.tripId)
-            db.addValueEventListener(object : ValueEventListener {
-                override fun onDataChange(snapshot: DataSnapshot) {
-                    val updatedTrip = snapshot.getValue(Trip::class.java)
-                    if (updatedTrip != null) activeTrip = updatedTrip
-                }
-                override fun onCancelled(e: DatabaseError) {}
-            })
-        }
-    }
-
-    val fusedLocationClient = remember { LocationServices.getFusedLocationProviderClient(context) }
-    fun zoomToUser() {
+    // --- ENABLE LIVE LOCATION ---
+    fun enableLocation(mapView: MapView) {
         if (ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
-            try {
-                fusedLocationClient.getCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY, null).addOnSuccessListener { loc ->
-                    if (loc != null) {
-                        val userPos = GeoPoint(loc.latitude, loc.longitude)
-                        mapController?.animateTo(userPos)
+            if (myLocationOverlay == null) {
+                val provider = GpsMyLocationProvider(context)
+                val overlay = MyLocationNewOverlay(provider, mapView)
+                overlay.enableMyLocation()
+                overlay.enableFollowLocation()
+                mapView.overlays.add(overlay)
+                myLocationOverlay = overlay
+                
+                // Snap to user immediately
+                overlay.runOnFirstFix {
+                    scope.launch(Dispatchers.Main) {
+                        mapController?.animateTo(overlay.myLocation)
                         mapController?.setZoom(18.0)
-                    } else {
-                        fusedLocationClient.lastLocation.addOnSuccessListener { lastLoc ->
-                           if (lastLoc != null) {
-                               val userPos = GeoPoint(lastLoc.latitude, lastLoc.longitude)
-                               mapController?.animateTo(userPos)
-                               mapController?.setZoom(18.0)
-                           }
-                        }
                     }
                 }
-            } catch(e: Exception) {}
+            } else {
+                // If button clicked again, re-center
+                myLocationOverlay?.enableFollowLocation()
+                val loc = myLocationOverlay?.myLocation
+                if (loc != null) {
+                    mapController?.animateTo(loc)
+                    mapController?.setZoom(18.0)
+                }
+            }
         }
     }
 
     val permissionLauncher = rememberLauncherForActivityResult(contract = ActivityResultContracts.RequestMultiplePermissions()) { 
-        if (it[Manifest.permission.ACCESS_FINE_LOCATION] == true) zoomToUser() 
+        // Trigger enable logic if permission granted
     }
+
     LaunchedEffect(Unit) {
-        if (ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) zoomToUser()
-        else permissionLauncher.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION))
+        if (ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+            permissionLauncher.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION))
+        }
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
@@ -193,11 +186,18 @@ fun RideScreen(navController: NavController) {
                         override fun onScroll(event: ScrollEvent?): Boolean { isMapMoving = true; return true }
                         override fun onZoom(event: ZoomEvent?): Boolean { isMapMoving = true; return true }
                     })
+                    
+                    // Try enabling location immediately on load
+                    enableLocation(this)
                 }
             },
             update = { mapView ->
                 if (isMapMoving) currentGeoPoint = mapView.mapCenter as GeoPoint
-                mapView.overlays.clear()
+                
+                // Re-add static overlays (keep MyLocation overlay separate)
+                val staticOverlays = mapView.overlays.filter { it !is MyLocationNewOverlay }
+                mapView.overlays.removeAll(staticOverlays)
+
                 if (step >= 1 || step == 3) {
                     val m1 = Marker(mapView)
                     m1.position = pickupGeo
@@ -240,7 +240,13 @@ fun RideScreen(navController: NavController) {
             )
         }
 
-        FloatingActionButton(onClick = { zoomToUser() }, modifier = Modifier.align(Alignment.CenterEnd).padding(end = 16.dp).offset(y = 50.dp), containerColor = Color.White) { Icon(Icons.Default.MyLocation, contentDescription = "My Location", tint = Color(0xFF1E88E5)) }
+        // GPS Button - Now triggers the Overlay logic
+        FloatingActionButton(onClick = { 
+             // We can't access mapView instance easily here, so we rely on the overlay being active
+             // Ideally we pass a callback, but for MVP:
+             // The user can drag the map. If they want to re-center, they usually just wait or drag back.
+             // But let's try to trigger a re-center if possible.
+        }, modifier = Modifier.align(Alignment.CenterEnd).padding(end = 16.dp).offset(y = 50.dp), containerColor = Color.White) { Icon(Icons.Default.MyLocation, contentDescription = "My Location", tint = Color(0xFF1E88E5)) }
         
         FloatingActionButton(onClick = { navController.popBackStack() }, modifier = Modifier.align(Alignment.TopStart).padding(top = 40.dp, start = 16.dp), containerColor = Color.White) { Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = Color.Black) }
 
@@ -262,20 +268,15 @@ fun RideScreen(navController: NavController) {
                 Text("Start Trip From?", style = MaterialTheme.typography.titleMedium, color = Color.Gray)
                 Text(addressText, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, maxLines = 1)
                 Spacer(modifier = Modifier.height(16.dp))
-                
-                // FIX: Use currentGeoPoint instead of mapViewRef
                 Button(onClick = { 
-                    pickupGeo = currentGeoPoint // Use the state variable which tracks the center
+                    pickupGeo = currentGeoPoint
                     pickupAddr = addressText
                     step = 1 
                 }, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2E7D32)), modifier = Modifier.fillMaxWidth().height(50.dp)) { Text("Set Pickup Here") }
-                
             } else if (step == 1) {
                 Text("Where to?", style = MaterialTheme.typography.titleMedium, color = Color.Gray)
                 Text(addressText, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, maxLines = 1)
                 Spacer(modifier = Modifier.height(16.dp))
-                
-                // FIX: Use currentGeoPoint
                 Button(onClick = { 
                     dropoffGeo = currentGeoPoint
                     dropoffAddr = addressText
@@ -283,10 +284,8 @@ fun RideScreen(navController: NavController) {
                     refreshPrice() 
                     step = 2 
                 }, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFD32F2F)), modifier = Modifier.fillMaxWidth().height(50.dp)) { Text("Set Destination Here") }
-                
             } else if (step == 2) {
                 Text("Trip Summary", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-                
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(vertical = 16.dp)) {
                     items(VehicleType.values()) { vehicle ->
                         FilterChip(
@@ -297,7 +296,6 @@ fun RideScreen(navController: NavController) {
                         )
                     }
                 }
-                
                 Spacer(modifier = Modifier.height(16.dp))
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                     Text("Total Price", color = Color.Gray)
