@@ -31,7 +31,6 @@ import com.bayera.travel.common.models.VehicleType
 import com.bayera.travel.utils.FareCalculator
 import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.Priority
-import com.google.android.gms.tasks.CancellationTokenSource
 import com.google.firebase.database.DataSnapshot
 import com.google.firebase.database.DatabaseError
 import com.google.firebase.database.FirebaseDatabase
@@ -139,45 +138,27 @@ fun RideScreen(navController: NavController) {
         }
     }
 
-    // --- AGGRESSIVE GPS LOGIC ---
     val fusedLocationClient = remember { LocationServices.getFusedLocationProviderClient(context) }
     
+    // --- FAST GPS LOGIC ---
     fun zoomToUser() {
         if (ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
-            Toast.makeText(context, "Acquiring GPS Signal...", Toast.LENGTH_SHORT).show()
-            
-            // PRIORITY_HIGH_ACCURACY forces GPS usage
-            val cancellationTokenSource = CancellationTokenSource()
-            fusedLocationClient.getCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY, cancellationTokenSource.token)
-                .addOnSuccessListener { loc ->
-                    if (loc != null) {
-                        val userPos = GeoPoint(loc.latitude, loc.longitude)
-                        mapController?.animateTo(userPos)
-                        mapController?.setZoom(18.0)
-                        currentGeoPoint = userPos // Force update UI state
-                        updateAddress(userPos)
-                    } else {
-                        // Fallback to last known if current is taking too long
-                        fusedLocationClient.lastLocation.addOnSuccessListener { lastLoc ->
-                            if (lastLoc != null) {
-                                val userPos = GeoPoint(lastLoc.latitude, lastLoc.longitude)
-                                mapController?.animateTo(userPos)
-                                mapController?.setZoom(18.0)
-                                currentGeoPoint = userPos
-                            } else {
-                                Toast.makeText(context, "Turn on GPS/Location in Settings", Toast.LENGTH_LONG).show()
-                            }
-                        }
-                    }
+            // 1. FAST: Try Last Known Location first (Instant)
+            fusedLocationClient.lastLocation.addOnSuccessListener { loc ->
+                if (loc != null) {
+                    val userPos = GeoPoint(loc.latitude, loc.longitude)
+                    mapController?.animateTo(userPos)
+                    mapController?.setZoom(18.0)
                 }
+                // 2. BACKGROUND: Request fresh location to refine precision
+                fusedLocationClient.getCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY, null)
+            }
         }
     }
 
     val permissionLauncher = rememberLauncherForActivityResult(contract = ActivityResultContracts.RequestMultiplePermissions()) { 
         if (it[Manifest.permission.ACCESS_FINE_LOCATION] == true) zoomToUser() 
     }
-    
-    // Auto-locate on open
     LaunchedEffect(Unit) {
         if (ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) zoomToUser()
         else permissionLauncher.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION))
@@ -270,6 +251,7 @@ fun RideScreen(navController: NavController) {
                 Text(addressText, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, maxLines = 1)
                 Spacer(modifier = Modifier.height(16.dp))
                 Button(onClick = { 
+                    // Use state variable for center
                     pickupGeo = currentGeoPoint
                     pickupAddr = addressText
                     step = 1 
