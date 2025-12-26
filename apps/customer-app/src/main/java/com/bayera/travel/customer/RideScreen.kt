@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.pm.PackageManager
 import android.location.Geocoder
 import android.os.Bundle
+import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -30,6 +31,7 @@ import com.bayera.travel.common.models.TripStatus
 import com.bayera.travel.common.models.VehicleType
 import com.bayera.travel.utils.FareCalculator
 import com.google.android.gms.location.LocationServices
+import com.google.android.gms.location.Priority
 import com.google.firebase.database.DataSnapshot
 import com.google.firebase.database.DatabaseError
 import com.google.firebase.database.FirebaseDatabase
@@ -61,7 +63,6 @@ fun RideScreen(navController: NavController) {
     val userName = prefs.getString("name", "User") ?: "User"
     val userPhone = prefs.getString("phone", "") ?: ""
     
-    // ARBA MINCH COORDINATES
     val startGeo = GeoPoint(6.0206, 37.5557)
     
     var step by remember { mutableIntStateOf(0) }
@@ -78,9 +79,7 @@ fun RideScreen(navController: NavController) {
     var selectedVehicle by remember { mutableStateOf(VehicleType.BAJAJ) }
     
     var mapController: org.osmdroid.api.IMapController? by remember { mutableStateOf(null) }
-    var mapViewRef: MapView? by remember { mutableStateOf(null) }
 
-    // Use Google Maps Tiles
     val googleMaps = object : XYTileSource("Google", 0, 19, 256, ".png", arrayOf("https://mt0.google.com/vt/lyrs=m&x=")) {
         override fun getTileURLString(pMapTileIndex: Long): String {
             return baseUrl + MapTileIndex.getX(pMapTileIndex) + "&y=" + MapTileIndex.getY(pMapTileIndex) + "&z=" + MapTileIndex.getZoom(pMapTileIndex)
@@ -127,25 +126,55 @@ fun RideScreen(navController: NavController) {
         }
     }
 
-    val fusedLocationClient = remember { LocationServices.getFusedLocationProviderClient(context) }
-    fun zoomToUser() {
-        if (ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
-            fusedLocationClient.lastLocation.addOnSuccessListener { loc ->
-                if (loc != null) {
-                    val userPos = GeoPoint(loc.latitude, loc.longitude)
-                    mapController?.animateTo(userPos)
-                    mapController?.setZoom(18.0)
+    LaunchedEffect(activeTrip?.tripId) {
+        if (activeTrip != null) {
+            val db = FirebaseDatabase.getInstance().getReference("trips").child(activeTrip!!.tripId)
+            db.addValueEventListener(object : ValueEventListener {
+                override fun onDataChange(snapshot: DataSnapshot) {
+                    val updatedTrip = snapshot.getValue(Trip::class.java)
+                    if (updatedTrip != null) activeTrip = updatedTrip
                 }
-            }
+                override fun onCancelled(e: DatabaseError) {}
+            })
         }
     }
 
-    // Force Initial Zoom
+    val fusedLocationClient = remember { LocationServices.getFusedLocationProviderClient(context) }
+    
+    // --- IMPROVED GPS LOGIC ---
+    // Uses "getCurrentLocation" (High Accuracy) instead of just "lastLocation"
+    fun zoomToUser() {
+        if (ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
+            try {
+                fusedLocationClient.getCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY, null)
+                    .addOnSuccessListener { loc ->
+                        if (loc != null) {
+                            val userPos = GeoPoint(loc.latitude, loc.longitude)
+                            mapController?.animateTo(userPos)
+                            mapController?.setZoom(18.0)
+                        } else {
+                            // Fallback if current is null, try last known
+                            fusedLocationClient.lastLocation.addOnSuccessListener { lastLoc ->
+                                if (lastLoc != null) {
+                                    val userPos = GeoPoint(lastLoc.latitude, lastLoc.longitude)
+                                    mapController?.animateTo(userPos)
+                                    mapController?.setZoom(18.0)
+                                } else {
+                                    Toast.makeText(context, "Waiting for GPS Signal...", Toast.LENGTH_SHORT).show()
+                                }
+                            }
+                        }
+                    }
+            } catch (e: Exception) {}
+        }
+    }
+
+    val permissionLauncher = rememberLauncherForActivityResult(contract = ActivityResultContracts.RequestMultiplePermissions()) { 
+        if (it[Manifest.permission.ACCESS_FINE_LOCATION] == true) zoomToUser() 
+    }
     LaunchedEffect(Unit) {
-        // Wait a tiny bit for map to load then zoom
-        kotlinx.coroutines.delay(500)
-        mapController?.setZoom(16.0)
-        mapController?.setCenter(startGeo)
+        if (ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) zoomToUser()
+        else permissionLauncher.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION))
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
@@ -157,13 +186,9 @@ fun RideScreen(navController: NavController) {
                     isTilesScaledToDpi = true
                     minZoomLevel = 4.0
                     maxZoomLevel = 22.0
-                    
-                    // Initial Settings
                     controller.setZoom(16.0)
                     controller.setCenter(startGeo)
-                    
                     mapController = controller
-                    mapViewRef = this
                     addMapListener(object : MapListener {
                         override fun onScroll(event: ScrollEvent?): Boolean { isMapMoving = true; return true }
                         override fun onZoom(event: ZoomEvent?): Boolean { isMapMoving = true; return true }
@@ -173,25 +198,18 @@ fun RideScreen(navController: NavController) {
             update = { mapView ->
                 if (isMapMoving) currentGeoPoint = mapView.mapCenter as GeoPoint
                 mapView.overlays.clear()
-                
-                // Draw Pickup Pin
                 if (step >= 1 || step == 3) {
                     val m1 = Marker(mapView)
                     m1.position = pickupGeo
                     m1.title = "Pickup"
-                    // Use a default marker resource or standard drawable
                     m1.icon = ContextCompat.getDrawable(context, org.osmdroid.library.R.drawable.marker_default)
                     mapView.overlays.add(m1)
                 }
-                
-                // Draw Dropoff Pin
                 if ((step >= 2 || step == 3) && dropoffGeo != null) {
                     val m2 = Marker(mapView)
                     m2.position = dropoffGeo
                     m2.title = "Dropoff"
                     mapView.overlays.add(m2)
-                    
-                    // Draw Line
                     if (routePoints.isNotEmpty()) {
                         val line = Polyline()
                         line.setPoints(routePoints)
@@ -213,37 +231,26 @@ fun RideScreen(navController: NavController) {
             }
         }
 
-        // Center Pin (Target)
         if (step < 2) {
             Icon(
-                imageVector = if (step == 0) Icons.Default.Home else Icons.Default.Flag,
+                // --- FIXED: Use Explore (Compass) Icon for Pickup ---
+                imageVector = if (step == 0) Icons.Default.Explore else Icons.Default.Flag,
                 contentDescription = "Pin",
                 modifier = Modifier.size(40.dp).align(Alignment.Center).offset(y = (-20).dp),
                 tint = if (step == 0) Color(0xFF2E7D32) else Color(0xFFD32F2F)
             )
         }
 
-        // GPS Button
-        FloatingActionButton(
-            onClick = { zoomToUser() },
-            modifier = Modifier.align(Alignment.CenterEnd).padding(end = 16.dp).offset(y = 50.dp),
-            containerColor = Color.White
-        ) { Icon(Icons.Default.MyLocation, contentDescription = "My Location", tint = Color(0xFF1E88E5)) }
+        FloatingActionButton(onClick = { zoomToUser() }, modifier = Modifier.align(Alignment.CenterEnd).padding(end = 16.dp).offset(y = 50.dp), containerColor = Color.White) { Icon(Icons.Default.MyLocation, contentDescription = "My Location", tint = Color(0xFF1E88E5)) }
         
-        // --- ADDED: MENU BUTTON (Three Lines) ---
-        // Clicking this goes back to the Super App Dashboard (which is the Menu)
-        FloatingActionButton(
-            onClick = { navController.popBackStack() },
-            modifier = Modifier.align(Alignment.TopStart).padding(top = 40.dp, start = 16.dp),
-            containerColor = Color.White
-        ) { Icon(Icons.Default.Menu, contentDescription = "Menu", tint = Color.Black) }
+        FloatingActionButton(onClick = { navController.popBackStack() }, modifier = Modifier.align(Alignment.TopStart).padding(top = 40.dp, start = 16.dp), containerColor = Color.White) { Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = Color.Black) }
 
-        // Bottom Sheet
         Column(modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth().background(Color.White, shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)).padding(24.dp)) {
             if (step == 3) {
                 if (activeTrip?.status == TripStatus.ACCEPTED) {
                     Text("✅ Driver Found!", style = MaterialTheme.typography.headlineSmall, color = Color(0xFF2E7D32), fontWeight = FontWeight.Bold)
                     Text("Driver: ${activeTrip?.driverId}", style = MaterialTheme.typography.bodyLarge)
+                    Text("Vehicle: ${activeTrip?.vehicleType}", style = MaterialTheme.typography.bodyMedium, color = Color.Gray)
                 } else {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         CircularProgressIndicator(color = Color(0xFF1E88E5), modifier = Modifier.size(24.dp))
@@ -257,11 +264,7 @@ fun RideScreen(navController: NavController) {
                 Text("Start Trip From?", style = MaterialTheme.typography.titleMedium, color = Color.Gray)
                 Text(addressText, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, maxLines = 1)
                 Spacer(modifier = Modifier.height(16.dp))
-                Button(onClick = { 
-                    // Force capture center
-                    val center = mapViewRef?.mapCenter as? GeoPoint
-                    if (center != null) { pickupGeo = center; pickupAddr = addressText; step = 1 } 
-                }, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2E7D32)), modifier = Modifier.fillMaxWidth().height(50.dp)) { Text("Set Pickup Here") }
+                Button(onClick = { val center = mapViewRef?.mapCenter as? GeoPoint; if (center != null) { pickupGeo = center; pickupAddr = addressText; step = 1 } }, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2E7D32)), modifier = Modifier.fillMaxWidth().height(50.dp)) { Text("Set Pickup Here") }
             } else if (step == 1) {
                 Text("Where to?", style = MaterialTheme.typography.titleMedium, color = Color.Gray)
                 Text(addressText, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, maxLines = 1)
