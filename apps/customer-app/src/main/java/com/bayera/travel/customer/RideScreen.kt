@@ -3,7 +3,6 @@ package com.bayera.travel.customer
 import android.Manifest
 import android.content.pm.PackageManager
 import android.location.Geocoder
-import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -79,6 +78,14 @@ fun RideScreen(navController: NavController) {
     var selectedVehicle by remember { mutableStateOf(VehicleType.BAJAJ) }
     
     var mapController: org.osmdroid.api.IMapController? by remember { mutableStateOf(null) }
+    
+    // FIXED: Declare mapViewRef as a MutableState so it persists across recompositions
+    // using 'remember { mutableStateOf<MapView?>(null) }'
+    // But actually, we don't need the View itself if we have 'currentGeoPoint'.
+    // The Map Listener UPDATES 'currentGeoPoint' automatically.
+    // So we can just use 'currentGeoPoint' instead of asking the map again!
+    
+    // SIMPLER FIX: Remove 'mapViewRef' usage and just use 'currentGeoPoint' which is already synced.
 
     val googleMaps = object : XYTileSource("Google", 0, 19, 256, ".png", arrayOf("https://mt0.google.com/vt/lyrs=m&x=")) {
         override fun getTileURLString(pMapTileIndex: Long): String {
@@ -140,32 +147,25 @@ fun RideScreen(navController: NavController) {
     }
 
     val fusedLocationClient = remember { LocationServices.getFusedLocationProviderClient(context) }
-    
-    // --- IMPROVED GPS LOGIC ---
-    // Uses "getCurrentLocation" (High Accuracy) instead of just "lastLocation"
     fun zoomToUser() {
         if (ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
             try {
-                fusedLocationClient.getCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY, null)
-                    .addOnSuccessListener { loc ->
-                        if (loc != null) {
-                            val userPos = GeoPoint(loc.latitude, loc.longitude)
-                            mapController?.animateTo(userPos)
-                            mapController?.setZoom(18.0)
-                        } else {
-                            // Fallback if current is null, try last known
-                            fusedLocationClient.lastLocation.addOnSuccessListener { lastLoc ->
-                                if (lastLoc != null) {
-                                    val userPos = GeoPoint(lastLoc.latitude, lastLoc.longitude)
-                                    mapController?.animateTo(userPos)
-                                    mapController?.setZoom(18.0)
-                                } else {
-                                    Toast.makeText(context, "Waiting for GPS Signal...", Toast.LENGTH_SHORT).show()
-                                }
-                            }
+                fusedLocationClient.getCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY, null).addOnSuccessListener { loc ->
+                    if (loc != null) {
+                        val userPos = GeoPoint(loc.latitude, loc.longitude)
+                        mapController?.animateTo(userPos)
+                        mapController?.setZoom(18.0)
+                    } else {
+                        fusedLocationClient.lastLocation.addOnSuccessListener { lastLoc ->
+                           if (lastLoc != null) {
+                               val userPos = GeoPoint(lastLoc.latitude, lastLoc.longitude)
+                               mapController?.animateTo(userPos)
+                               mapController?.setZoom(18.0)
+                           }
                         }
                     }
-            } catch (e: Exception) {}
+                }
+            } catch(e: Exception) {}
         }
     }
 
@@ -233,7 +233,6 @@ fun RideScreen(navController: NavController) {
 
         if (step < 2) {
             Icon(
-                // --- FIXED: Use Explore (Compass) Icon for Pickup ---
                 imageVector = if (step == 0) Icons.Default.Explore else Icons.Default.Flag,
                 contentDescription = "Pin",
                 modifier = Modifier.size(40.dp).align(Alignment.Center).offset(y = (-20).dp),
@@ -250,7 +249,6 @@ fun RideScreen(navController: NavController) {
                 if (activeTrip?.status == TripStatus.ACCEPTED) {
                     Text("✅ Driver Found!", style = MaterialTheme.typography.headlineSmall, color = Color(0xFF2E7D32), fontWeight = FontWeight.Bold)
                     Text("Driver: ${activeTrip?.driverId}", style = MaterialTheme.typography.bodyLarge)
-                    Text("Vehicle: ${activeTrip?.vehicleType}", style = MaterialTheme.typography.bodyMedium, color = Color.Gray)
                 } else {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         CircularProgressIndicator(color = Color(0xFF1E88E5), modifier = Modifier.size(24.dp))
@@ -264,20 +262,28 @@ fun RideScreen(navController: NavController) {
                 Text("Start Trip From?", style = MaterialTheme.typography.titleMedium, color = Color.Gray)
                 Text(addressText, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, maxLines = 1)
                 Spacer(modifier = Modifier.height(16.dp))
-                Button(onClick = { val center = mapViewRef?.mapCenter as? GeoPoint; if (center != null) { pickupGeo = center; pickupAddr = addressText; step = 1 } }, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2E7D32)), modifier = Modifier.fillMaxWidth().height(50.dp)) { Text("Set Pickup Here") }
+                
+                // FIX: Use currentGeoPoint instead of mapViewRef
+                Button(onClick = { 
+                    pickupGeo = currentGeoPoint // Use the state variable which tracks the center
+                    pickupAddr = addressText
+                    step = 1 
+                }, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2E7D32)), modifier = Modifier.fillMaxWidth().height(50.dp)) { Text("Set Pickup Here") }
+                
             } else if (step == 1) {
                 Text("Where to?", style = MaterialTheme.typography.titleMedium, color = Color.Gray)
                 Text(addressText, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, maxLines = 1)
                 Spacer(modifier = Modifier.height(16.dp))
+                
+                // FIX: Use currentGeoPoint
                 Button(onClick = { 
-                    val center = mapViewRef?.mapCenter as? GeoPoint
-                    if (center != null) {
-                        dropoffGeo = center; dropoffAddr = addressText
-                        fetchRoute(pickupGeo!!, dropoffGeo!!)
-                        refreshPrice() 
-                        step = 2 
-                    }
+                    dropoffGeo = currentGeoPoint
+                    dropoffAddr = addressText
+                    fetchRoute(pickupGeo!!, dropoffGeo!!)
+                    refreshPrice() 
+                    step = 2 
                 }, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFD32F2F)), modifier = Modifier.fillMaxWidth().height(50.dp)) { Text("Set Destination Here") }
+                
             } else if (step == 2) {
                 Text("Trip Summary", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
                 
