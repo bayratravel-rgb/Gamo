@@ -1,6 +1,7 @@
 package com.bayera.travel.customer
 
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background // FIXED: Added import
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
@@ -60,7 +61,6 @@ fun ShoppingScreen(navController: NavController) {
         }
     ) { padding ->
         Column(modifier = Modifier.padding(padding).padding(16.dp)) {
-            // Category Chips
             ScrollableTabRow(selectedTabIndex = categories.indexOf(selectedCategory), edgePadding = 0.dp, containerColor = Color.Transparent, contentColor = MaterialTheme.colorScheme.primary) {
                 categories.forEach { category ->
                     Tab(
