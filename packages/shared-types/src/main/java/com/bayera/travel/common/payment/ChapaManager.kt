@@ -8,8 +8,8 @@ import org.json.JSONObject
 import java.io.IOException
 
 object ChapaManager {
-    // REPLACE THIS WITH YOUR PUBLIC KEY!
-    private const val CHAPA_PUBLIC_KEY = "CHAPUBK_TEST-YourKeyHere" 
+    // YOUR REAL KEY
+    private const val CHAPA_PUBLIC_KEY = "CHAPUBK-RMBiuos5FVUuNSjGYEANHhjFDJaCkTuk" 
     
     fun initializePayment(
         email: String,
@@ -29,8 +29,8 @@ object ChapaManager {
         json.put("first_name", firstName)
         json.put("last_name", lastName)
         json.put("tx_ref", txRef)
-        json.put("callback_url", "https://google.com") // Dummy redirect
-        json.put("return_url", "https://google.com")
+        json.put("callback_url", "https://google.com")
+        json.put("return_url", "https://google.com") // Returns to app eventually
 
         val body = json.toString().toRequestBody(mediaType)
         
