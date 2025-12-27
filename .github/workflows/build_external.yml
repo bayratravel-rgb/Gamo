@@ -30,23 +30,26 @@ jobs:
         echo "       DOWNLOAD LINKS (Valid for 14 Days)"
         echo "---------------------------------------------------"
         
-        echo "Uploading CUSTOMER APP..."
-        curl --upload-file apps/customer-app/build/outputs/apk/debug/apps-customer-app-debug.apk https://transfer.sh/customer-app.apk
-        echo ""
-        
-        echo "Uploading DRIVER APP..."
-        curl --upload-file apps/driver-app/build/outputs/apk/debug/apps-driver-app-debug.apk https://transfer.sh/driver-app.apk
-        echo ""
-        
-        echo "Uploading MERCHANT APP..."
-        curl --upload-file apps/merchant-app/build/outputs/apk/debug/apps-merchant-app-debug.apk https://transfer.sh/merchant-app.apk
-        echo ""
-        
-        echo "Uploading HOTEL APP..."
-        curl --upload-file apps/hotel-reception-app/build/outputs/apk/debug/apps-hotel-reception-app-debug.apk https://transfer.sh/hotel-app.apk
-        echo ""
-        
-        echo "Uploading DELIVERY APP..."
-        curl --upload-file apps/delivery-app/build/outputs/apk/debug/apps-delivery-app-debug.apk https://transfer.sh/delivery-app.apk
-        echo ""
+        # Function to upload whatever APK is found in the folder
+        upload_app() {
+            APP_NAME=$1
+            DIR=$2
+            # Find the first APK in the debug folder
+            FILE=$(find $DIR -name "*.apk" | head -n 1)
+            
+            if [ -f "$FILE" ]; then
+                echo "Uploading $APP_NAME from $FILE..."
+                curl --upload-file "$FILE" "https://transfer.sh/$APP_NAME.apk"
+                echo ""
+            else
+                echo "ERROR: No APK found for $APP_NAME in $DIR"
+            fi
+        }
+
+        upload_app "customer-app" "apps/customer-app/build/outputs/apk/debug"
+        upload_app "driver-app" "apps/driver-app/build/outputs/apk/debug"
+        upload_app "merchant-app" "apps/merchant-app/build/outputs/apk/debug"
+        upload_app "hotel-app" "apps/hotel-reception-app/build/outputs/apk/debug"
+        upload_app "delivery-app" "apps/delivery-app/build/outputs/apk/debug"
+
         echo "---------------------------------------------------"
