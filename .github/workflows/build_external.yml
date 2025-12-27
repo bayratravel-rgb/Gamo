@@ -1,4 +1,4 @@
-name: Master Build (External Upload)
+name: Master Build (Transfer.sh)
 
 on:
   push:
@@ -24,14 +24,11 @@ jobs:
     - name: Build All Apps
       run: ./gradlew assembleDebug
 
-    # --- NEW UPLOAD METHOD: transfer.sh ---
-    # Since GitHub storage is full, we upload to transfer.sh and print the link
-    
     - name: Upload & Print Links
       run: |
-        echo "=========================================="
+        echo "---------------------------------------------------"
         echo "       DOWNLOAD LINKS (Valid for 14 Days)"
-        echo "=========================================="
+        echo "---------------------------------------------------"
         
         echo "Uploading CUSTOMER APP..."
         curl --upload-file apps/customer-app/build/outputs/apk/debug/apps-customer-app-debug.apk https://transfer.sh/customer-app.apk
@@ -52,4 +49,4 @@ jobs:
         echo "Uploading DELIVERY APP..."
         curl --upload-file apps/delivery-app/build/outputs/apk/debug/apps-delivery-app-debug.apk https://transfer.sh/delivery-app.apk
         echo ""
-        echo "=========================================="
+        echo "---------------------------------------------------"
