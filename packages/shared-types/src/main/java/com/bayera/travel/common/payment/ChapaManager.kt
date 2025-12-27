@@ -8,8 +8,8 @@ import org.json.JSONObject
 import java.io.IOException
 
 object ChapaManager {
-    // YOUR REAL KEY
-    private const val CHAPA_PUBLIC_KEY = "CHAPUBK-RMBiuos5FVUuNSjGYEANHhjFDJaCkTuk" 
+    // YOUR KEY IS HERE:
+    private const val CHAPA_PUBLIC_KEY = "CHAPUBK-RMBiuos5FVUuNSjGYEANHhjFDJaCkTuk"
     
     fun initializePayment(
         email: String,
@@ -29,8 +29,9 @@ object ChapaManager {
         json.put("first_name", firstName)
         json.put("last_name", lastName)
         json.put("tx_ref", txRef)
+        // Redirect URLs (Important for Chapa to know where to go back)
         json.put("callback_url", "https://google.com")
-        json.put("return_url", "https://google.com") // Returns to app eventually
+        json.put("return_url", "https://google.com")
 
         val body = json.toString().toRequestBody(mediaType)
         
@@ -44,15 +45,20 @@ object ChapaManager {
         Thread {
             try {
                 val response = client.newCall(request).execute()
-                if (response.isSuccessful) {
-                    val resBody = response.body?.string()
+                val resBody = response.body?.string()
+                
+                if (response.isSuccessful && resBody != null) {
+                    // Parse the Checkout URL
                     val resJson = JSONObject(resBody)
-                    val checkoutUrl = resJson.getJSONObject("data").getString("checkout_url")
+                    val data = resJson.optJSONObject("data")
+                    val checkoutUrl = data?.optString("checkout_url")
                     callback(checkoutUrl)
                 } else {
+                    println("Chapa Error: $resBody")
                     callback(null)
                 }
             } catch (e: Exception) {
+                e.printStackTrace()
                 callback(null)
             }
         }.start()

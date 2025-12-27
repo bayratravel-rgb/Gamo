@@ -7,10 +7,10 @@ import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.AccountBalanceWallet
+import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -18,6 +18,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import com.bayera.travel.common.payment.ChapaManager
@@ -29,8 +30,8 @@ fun WalletScreen(navController: NavController) {
     val context = LocalContext.current
     val prefs = context.getSharedPreferences("user_prefs", Context.MODE_PRIVATE)
     
-    // Mock Balance (In real app, fetch from Firebase)
-    var balance by remember { mutableStateOf(prefs.getFloat("wallet_balance", 0.0f)) }
+    // Balance State
+    var balance by remember { mutableFloatStateOf(prefs.getFloat("wallet_balance", 0.0f)) }
     var amountText by remember { mutableStateOf("") }
     var isLoading by remember { mutableStateOf(false) }
 
@@ -46,8 +47,8 @@ fun WalletScreen(navController: NavController) {
             
             // BALANCE CARD
             Card(
-                modifier = Modifier.fillMaxWidth().height(150.dp),
-                colors = CardDefaults.cardColors(containerColor = Color(0xFF1E88E5)),
+                modifier = Modifier.fillMaxWidth().height(140.dp),
+                colors = CardDefaults.cardColors(containerColor = Color(0xFF2E7D32)), // Money Green
                 elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
             ) {
                 Column(
@@ -57,22 +58,22 @@ fun WalletScreen(navController: NavController) {
                 ) {
                     Icon(Icons.Default.AccountBalanceWallet, null, tint = Color.White, modifier = Modifier.size(40.dp))
                     Spacer(modifier = Modifier.height(8.dp))
-                    Text("Total Balance", color = Color.White.copy(alpha = 0.8f))
-                    Text("${balance} ETB", style = MaterialTheme.typography.headlineLarge, color = Color.White, fontWeight = FontWeight.Bold)
+                    Text("Current Balance", color = Color.White.copy(alpha = 0.8f))
+                    Text("$balance ETB", style = MaterialTheme.typography.headlineLarge, color = Color.White, fontWeight = FontWeight.Bold)
                 }
             }
 
             Spacer(modifier = Modifier.height(32.dp))
             
-            Text("Top Up Wallet", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            Text("Top Up Balance", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
             Spacer(modifier = Modifier.height(16.dp))
             
             OutlinedTextField(
                 value = amountText,
                 onValueChange = { amountText = it },
-                label = { Text("Enter Amount (ETB)") },
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true
+                label = { Text("Amount (ETB)") },
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                modifier = Modifier.fillMaxWidth()
             )
             
             Spacer(modifier = Modifier.height(24.dp))
@@ -80,37 +81,44 @@ fun WalletScreen(navController: NavController) {
             Button(
                 onClick = {
                     val amount = amountText.toDoubleOrNull()
-                    if (amount != null && amount > 0) {
+                    if (amount != null && amount >= 5.0) {
                         isLoading = true
-                        val txRef = "TX-${UUID.randomUUID().toString().take(8)}"
-                        val email = "customer@bayera.com" // Replace with user email
+                        val txRef = "TX-${UUID.randomUUID().toString().take(10)}"
+                        val email = "customer@bayera.com" 
+                        val fName = prefs.getString("name", "User") ?: "User"
                         
                         // CALL CHAPA
-                        ChapaManager.initializePayment(email, amount, "Bayera", "User", txRef) { url ->
+                        ChapaManager.initializePayment(email, amount, fName, "Bayera", txRef) { url ->
                             isLoading = false
                             if (url != null) {
-                                // Open Payment Page
+                                // Open Browser for Telebirr/CBE/Boa
                                 val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
                                 context.startActivity(intent)
                                 
-                                // Simulate Success for MVP (Update Balance)
-                                val newBalance = balance + amount.toFloat()
-                                balance = newBalance
-                                prefs.edit().putFloat("wallet_balance", newBalance).apply()
+                                // MVP HACK: Auto-add balance for demo (Real app needs webhook)
+                                // We simulate success because we can't listen to the callback in MVP
+                                val newBal = balance + amount.toFloat()
+                                prefs.edit().putFloat("wallet_balance", newBal).apply()
+                                balance = newBal
                             } else {
-                                // Must run on UI Thread for Toast
-                                // (Simplified for Compose context, usually need Handler)
+                                // Run on UI Thread
+                                // (Toast won't work easily from background thread in Compose without Handler, so we skip error toast for MVP simplicity)
                             }
                         }
+                    } else {
+                        Toast.makeText(context, "Enter valid amount (> 5 ETB)", Toast.LENGTH_SHORT).show()
                     }
                 },
                 modifier = Modifier.fillMaxWidth().height(50.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2E7D32)),
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1E88E5)),
                 enabled = !isLoading
             ) {
                 if (isLoading) CircularProgressIndicator(color = Color.White, modifier = Modifier.size(24.dp))
-                else Text("Add Money")
+                else Text("Pay with Telebirr / Chapa")
             }
+            
+            Spacer(modifier = Modifier.height(16.dp))
+            Text("Secured by Chapa", style = MaterialTheme.typography.bodySmall, color = Color.Gray, modifier = Modifier.align(Alignment.CenterHorizontally))
         }
     }
 }

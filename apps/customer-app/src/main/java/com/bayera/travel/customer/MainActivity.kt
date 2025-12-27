@@ -7,7 +7,6 @@ import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -25,8 +24,6 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.google.firebase.FirebaseApp
 import org.osmdroid.config.Configuration
-// FIXED: Import ShoppingScreen explicitly (if in same package, it should be auto, but let's be safe)
-import com.bayera.travel.customer.ShoppingScreen
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -52,12 +49,12 @@ class MainActivity : ComponentActivity() {
                     composable("login") { LoginScreen(navController) }
                     composable("super_home") { SuperAppHome(navController) }
                     composable("ride_home") { RideScreen(navController) }
-                    // FIXED: Correctly referenced ShoppingScreen
                     composable("delivery_home") { ShoppingScreen(navController) }
                     composable("hotel_home") { HotelScreen(navController) }
                     composable("profile") { ProfileScreen(navController) }
                     composable("settings") { SettingsScreen(navController) }
                     composable("history") { HistoryScreen(navController) }
+                    composable("wallet") { WalletScreen(navController) }
                 }
             }
         }
@@ -69,6 +66,8 @@ fun SuperAppHome(navController: NavController) {
     val context = LocalContext.current
     val prefs = context.getSharedPreferences("user_prefs", Context.MODE_PRIVATE)
     val userName = prefs.getString("name", "User") ?: "User"
+    // Live Balance update
+    val balance = prefs.getFloat("wallet_balance", 0.0f) 
 
     Scaffold(
         bottomBar = {
@@ -92,11 +91,37 @@ fun SuperAppHome(navController: NavController) {
                 IconButton(onClick = { navController.navigate("settings") }) { Icon(Icons.Default.Settings, null) }
             }
 
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // --- WALLET CARD ---
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(90.dp)
+                    .clickable { navController.navigate("wallet") },
+                colors = CardDefaults.cardColors(containerColor = Color(0xFF2E7D32)), // Green for Money
+                elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxSize().padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column {
+                        Text("Wallet Balance", color = Color.White.copy(alpha = 0.8f))
+                        Text("$balance ETB", color = Color.White, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+                    }
+                    Spacer(modifier = Modifier.weight(1f))
+                    Button(
+                        onClick = { navController.navigate("wallet") },
+                        colors = ButtonDefaults.buttonColors(containerColor = Color.White, contentColor = Color(0xFF2E7D32))
+                    ) { Text("Top Up") }
+                }
+            }
+
             Spacer(modifier = Modifier.height(24.dp))
             Text("Services", style = MaterialTheme.typography.titleMedium, color = Color.Gray)
             Spacer(modifier = Modifier.height(16.dp))
 
-            // SERVICE GRID
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 ServiceCard("Ride", Icons.Default.LocalTaxi, Color(0xFFE3F2FD), Color(0xFF1E88E5)) { navController.navigate("ride_home") }
                 ServiceCard("Shopping", Icons.Default.ShoppingCart, Color(0xFFFFF3E0), Color(0xFFE65100)) { navController.navigate("delivery_home") }
@@ -104,16 +129,12 @@ fun SuperAppHome(navController: NavController) {
             
             Spacer(modifier = Modifier.height(16.dp))
             
-            // HOTEL CARD
             Card(
                 modifier = Modifier.fillMaxWidth().height(100.dp).clickable { navController.navigate("hotel_home") },
                 colors = CardDefaults.cardColors(containerColor = Color(0xFFF3E5F5)),
                 elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
             ) {
-                Row(
-                    modifier = Modifier.fillMaxSize().padding(16.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
+                Row(modifier = Modifier.fillMaxSize().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Default.Hotel, null, tint = Color(0xFF6A1B9A), modifier = Modifier.size(40.dp))
                     Spacer(modifier = Modifier.width(16.dp))
                     Column {
