@@ -1,4 +1,4 @@
-name: Master Build
+name: Master Build (External Upload)
 
 on:
   push:
@@ -24,32 +24,32 @@ jobs:
     - name: Build All Apps
       run: ./gradlew assembleDebug
 
-    - name: Upload Customer App
-      uses: actions/upload-artifact@v4
-      with:
-        name: CUSTOMER-APP
-        path: apps/customer-app/build/outputs/apk/debug/*.apk
-
-    - name: Upload Driver App
-      uses: actions/upload-artifact@v4
-      with:
-        name: DRIVER-APP
-        path: apps/driver-app/build/outputs/apk/debug/*.apk
-
-    - name: Upload Merchant App
-      uses: actions/upload-artifact@v4
-      with:
-        name: MERCHANT-APP
-        path: apps/merchant-app/build/outputs/apk/debug/*.apk
+    # --- NEW UPLOAD METHOD: transfer.sh ---
+    # Since GitHub storage is full, we upload to transfer.sh and print the link
+    
+    - name: Upload & Print Links
+      run: |
+        echo "=========================================="
+        echo "       DOWNLOAD LINKS (Valid for 14 Days)"
+        echo "=========================================="
         
-    - name: Upload Hotel App
-      uses: actions/upload-artifact@v4
-      with:
-        name: HOTEL-APP
-        path: apps/hotel-reception-app/build/outputs/apk/debug/*.apk
+        echo "Uploading CUSTOMER APP..."
+        curl --upload-file apps/customer-app/build/outputs/apk/debug/apps-customer-app-debug.apk https://transfer.sh/customer-app.apk
+        echo ""
         
-    - name: Upload Delivery App
-      uses: actions/upload-artifact@v4
-      with:
-        name: DELIVERY-APP
-        path: apps/delivery-app/build/outputs/apk/debug/*.apk
+        echo "Uploading DRIVER APP..."
+        curl --upload-file apps/driver-app/build/outputs/apk/debug/apps-driver-app-debug.apk https://transfer.sh/driver-app.apk
+        echo ""
+        
+        echo "Uploading MERCHANT APP..."
+        curl --upload-file apps/merchant-app/build/outputs/apk/debug/apps-merchant-app-debug.apk https://transfer.sh/merchant-app.apk
+        echo ""
+        
+        echo "Uploading HOTEL APP..."
+        curl --upload-file apps/hotel-reception-app/build/outputs/apk/debug/apps-hotel-reception-app-debug.apk https://transfer.sh/hotel-app.apk
+        echo ""
+        
+        echo "Uploading DELIVERY APP..."
+        curl --upload-file apps/delivery-app/build/outputs/apk/debug/apps-delivery-app-debug.apk https://transfer.sh/delivery-app.apk
+        echo ""
+        echo "=========================================="
