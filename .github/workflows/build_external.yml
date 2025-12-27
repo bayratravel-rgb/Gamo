@@ -1,4 +1,4 @@
-name: Master Build (Transfer.sh)
+name: Master Build (File.io)
 
 on:
   push:
@@ -27,29 +27,29 @@ jobs:
     - name: Upload & Print Links
       run: |
         echo "---------------------------------------------------"
-        echo "       DOWNLOAD LINKS (Valid for 14 Days)"
+        echo "       DOWNLOAD LINKS (Click to Download)"
         echo "---------------------------------------------------"
         
-        # Function to upload whatever APK is found in the folder
         upload_app() {
             APP_NAME=$1
             DIR=$2
-            # Find the first APK in the debug folder
             FILE=$(find $DIR -name "*.apk" | head -n 1)
             
             if [ -f "$FILE" ]; then
-                echo "Uploading $APP_NAME from $FILE..."
-                curl --upload-file "$FILE" "https://transfer.sh/$APP_NAME.apk"
+                echo "Uploading $APP_NAME..."
+                # Upload to file.io and extract the 'link' from JSON response
+                LINK=$(curl -F "file=@$FILE" https://file.io | grep -o '"link":"[^"]*' | cut -d'"' -f4)
+                echo "$APP_NAME Download: $LINK"
                 echo ""
             else
-                echo "ERROR: No APK found for $APP_NAME in $DIR"
+                echo "ERROR: No APK found for $APP_NAME"
             fi
         }
 
-        upload_app "customer-app" "apps/customer-app/build/outputs/apk/debug"
-        upload_app "driver-app" "apps/driver-app/build/outputs/apk/debug"
-        upload_app "merchant-app" "apps/merchant-app/build/outputs/apk/debug"
-        upload_app "hotel-app" "apps/hotel-reception-app/build/outputs/apk/debug"
-        upload_app "delivery-app" "apps/delivery-app/build/outputs/apk/debug"
+        upload_app "Customer-App" "apps/customer-app/build/outputs/apk/debug"
+        upload_app "Driver-App" "apps/driver-app/build/outputs/apk/debug"
+        upload_app "Merchant-App" "apps/merchant-app/build/outputs/apk/debug"
+        upload_app "Hotel-App" "apps/hotel-reception-app/build/outputs/apk/debug"
+        upload_app "Delivery-App" "apps/delivery-app/build/outputs/apk/debug"
 
         echo "---------------------------------------------------"
