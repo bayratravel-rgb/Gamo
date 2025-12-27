@@ -22,12 +22,16 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import com.bayera.travel.common.payment.ChapaManager
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.util.UUID
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun WalletScreen(navController: NavController) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     val prefs = context.getSharedPreferences("user_prefs", Context.MODE_PRIVATE)
     
     var balance by remember { mutableFloatStateOf(prefs.getFloat("wallet_balance", 0.0f)) }
@@ -46,7 +50,7 @@ fun WalletScreen(navController: NavController) {
             
             Card(
                 modifier = Modifier.fillMaxWidth().height(140.dp),
-                colors = CardDefaults.cardColors(containerColor = Color(0xFF2E7D32)),
+                colors = CardDefaults.cardColors(containerColor = Color(0xFF2E7D32)), 
                 elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
             ) {
                 Column(
@@ -85,20 +89,23 @@ fun WalletScreen(navController: NavController) {
                         val email = "customer@bayera.com" 
                         val fName = prefs.getString("name", "User") ?: "User"
                         
-                        Toast.makeText(context, "Processing Payment...", Toast.LENGTH_SHORT).show()
-
-                        ChapaManager.initializePayment(email, amount, fName, "Bayera", txRef) { url ->
-                            // IMPORTANT: Switch back to Main Thread for UI updates
-                            (context as? android.app.Activity)?.runOnUiThread {
-                                isLoading = false
-                                if (url != null) {
-                                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
-                                    context.startActivity(intent)
-                                    val newBal = balance + amount.toFloat()
-                                    prefs.edit().putFloat("wallet_balance", newBal).apply()
-                                    balance = newBal
-                                } else {
-                                    Toast.makeText(context, "Payment Failed. Check Internet.", Toast.LENGTH_LONG).show()
+                        // Using Coroutine Scope for background thread safety
+                        scope.launch(Dispatchers.IO) {
+                            ChapaManager.initializePayment(email, amount, fName, "Bayera", txRef) { url ->
+                                scope.launch(Dispatchers.Main) {
+                                    isLoading = false
+                                    if (url != null) {
+                                        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
+                                        context.startActivity(intent)
+                                        
+                                        // Update Balance (MVP Hack)
+                                        val newBal = balance + amount.toFloat()
+                                        prefs.edit().putFloat("wallet_balance", newBal).apply()
+                                        balance = newBal
+                                    } else {
+                                        // SHOW ERROR
+                                        Toast.makeText(context, "Payment Failed. Check Internet or Key.", Toast.LENGTH_LONG).show()
+                                    }
                                 }
                             }
                         }
@@ -113,9 +120,6 @@ fun WalletScreen(navController: NavController) {
                 if (isLoading) CircularProgressIndicator(color = Color.White, modifier = Modifier.size(24.dp))
                 else Text("Pay with Telebirr / Chapa")
             }
-            
-            Spacer(modifier = Modifier.height(16.dp))
-            Text("Secured by Chapa", style = MaterialTheme.typography.bodySmall, color = Color.Gray, modifier = Modifier.align(Alignment.CenterHorizontally))
         }
     }
 }
