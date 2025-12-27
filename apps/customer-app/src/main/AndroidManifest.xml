@@ -10,7 +10,8 @@
         android:name=".BayeraApplication"
         android:allowBackup="true"
         android:label="Bayera Travel"
-        android:theme="@style/Theme.BayeraTravel">
+        android:theme="@style/Theme.BayeraTravel"
+        android:networkSecurityConfig="@xml/network_security_config">
         <activity
             android:name=".MainActivity"
             android:exported="true">

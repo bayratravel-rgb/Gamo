@@ -30,7 +30,6 @@ fun WalletScreen(navController: NavController) {
     val context = LocalContext.current
     val prefs = context.getSharedPreferences("user_prefs", Context.MODE_PRIVATE)
     
-    // Balance State
     var balance by remember { mutableFloatStateOf(prefs.getFloat("wallet_balance", 0.0f)) }
     var amountText by remember { mutableStateOf("") }
     var isLoading by remember { mutableStateOf(false) }
@@ -45,10 +44,9 @@ fun WalletScreen(navController: NavController) {
     ) { padding ->
         Column(modifier = Modifier.padding(padding).padding(16.dp)) {
             
-            // BALANCE CARD
             Card(
                 modifier = Modifier.fillMaxWidth().height(140.dp),
-                colors = CardDefaults.cardColors(containerColor = Color(0xFF2E7D32)), // Money Green
+                colors = CardDefaults.cardColors(containerColor = Color(0xFF2E7D32)),
                 elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
             ) {
                 Column(
@@ -87,22 +85,21 @@ fun WalletScreen(navController: NavController) {
                         val email = "customer@bayera.com" 
                         val fName = prefs.getString("name", "User") ?: "User"
                         
-                        // CALL CHAPA
+                        Toast.makeText(context, "Processing Payment...", Toast.LENGTH_SHORT).show()
+
                         ChapaManager.initializePayment(email, amount, fName, "Bayera", txRef) { url ->
-                            isLoading = false
-                            if (url != null) {
-                                // Open Browser for Telebirr/CBE/Boa
-                                val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
-                                context.startActivity(intent)
-                                
-                                // MVP HACK: Auto-add balance for demo (Real app needs webhook)
-                                // We simulate success because we can't listen to the callback in MVP
-                                val newBal = balance + amount.toFloat()
-                                prefs.edit().putFloat("wallet_balance", newBal).apply()
-                                balance = newBal
-                            } else {
-                                // Run on UI Thread
-                                // (Toast won't work easily from background thread in Compose without Handler, so we skip error toast for MVP simplicity)
+                            // IMPORTANT: Switch back to Main Thread for UI updates
+                            (context as? android.app.Activity)?.runOnUiThread {
+                                isLoading = false
+                                if (url != null) {
+                                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
+                                    context.startActivity(intent)
+                                    val newBal = balance + amount.toFloat()
+                                    prefs.edit().putFloat("wallet_balance", newBal).apply()
+                                    balance = newBal
+                                } else {
+                                    Toast.makeText(context, "Payment Failed. Check Internet.", Toast.LENGTH_LONG).show()
+                                }
                             }
                         }
                     } else {
