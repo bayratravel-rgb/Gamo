@@ -4,9 +4,7 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountBalanceWallet
@@ -21,22 +19,15 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
-import com.bayera.travel.common.payment.ChapaManager
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
-import java.util.UUID
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun WalletScreen(navController: NavController) {
     val context = LocalContext.current
-    val scope = rememberCoroutineScope()
     val prefs = context.getSharedPreferences("user_prefs", Context.MODE_PRIVATE)
     
     var balance by remember { mutableFloatStateOf(prefs.getFloat("wallet_balance", 0.0f)) }
     var amountText by remember { mutableStateOf("") }
-    var isLoading by remember { mutableStateOf(false) }
 
     Scaffold(
         topBar = {
@@ -84,41 +75,26 @@ fun WalletScreen(navController: NavController) {
                 onClick = {
                     val amount = amountText.toDoubleOrNull()
                     if (amount != null && amount >= 5.0) {
-                        isLoading = true
-                        val txRef = "TX-${UUID.randomUUID().toString().take(10)}"
-                        val email = "customer@bayera.com" 
-                        val fName = prefs.getString("name", "User") ?: "User"
+                        // OPEN CHAPA TEST PAGE DIRECTLY
+                        // In production, this URL comes from your backend.
+                        // For now, we open Chapa's demo or your own payment page if you have one.
+                        val url = "https://chapa.co" 
+                        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
+                        context.startActivity(intent)
                         
-                        // Using Coroutine Scope for background thread safety
-                        scope.launch(Dispatchers.IO) {
-                            ChapaManager.initializePayment(email, amount, fName, "Bayera", txRef) { url ->
-                                scope.launch(Dispatchers.Main) {
-                                    isLoading = false
-                                    if (url != null) {
-                                        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
-                                        context.startActivity(intent)
-                                        
-                                        // Update Balance (MVP Hack)
-                                        val newBal = balance + amount.toFloat()
-                                        prefs.edit().putFloat("wallet_balance", newBal).apply()
-                                        balance = newBal
-                                    } else {
-                                        // SHOW ERROR
-                                        Toast.makeText(context, "Payment Failed. Check Internet or Key.", Toast.LENGTH_LONG).show()
-                                    }
-                                }
-                            }
-                        }
+                        // Optimistic Update (Simulate success)
+                        val newBal = balance + amount.toFloat()
+                        prefs.edit().putFloat("wallet_balance", newBal).apply()
+                        balance = newBal
+                        Toast.makeText(context, "Redirecting to Payment...", Toast.LENGTH_SHORT).show()
                     } else {
-                        Toast.makeText(context, "Enter valid amount (> 5 ETB)", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(context, "Enter valid amount", Toast.LENGTH_SHORT).show()
                     }
                 },
                 modifier = Modifier.fillMaxWidth().height(50.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1E88E5)),
-                enabled = !isLoading
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1E88E5))
             ) {
-                if (isLoading) CircularProgressIndicator(color = Color.White, modifier = Modifier.size(24.dp))
-                else Text("Pay with Telebirr / Chapa")
+                Text("Pay with Telebirr")
             }
         }
     }
