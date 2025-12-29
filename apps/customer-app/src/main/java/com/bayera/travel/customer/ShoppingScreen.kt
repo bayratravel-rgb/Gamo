@@ -1,7 +1,8 @@
 package com.bayera.travel.customer
 
+import android.widget.Toast
 import androidx.compose.foundation.Image
-import androidx.compose.foundation.background // FIXED: Added import
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
@@ -16,19 +17,28 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import coil.compose.rememberAsyncImagePainter
 import com.bayera.travel.common.models.Product
+import com.bayera.travel.common.models.Delivery
+import com.bayera.travel.common.models.DeliveryStatus
 import com.google.firebase.database.DataSnapshot
 import com.google.firebase.database.DatabaseError
 import com.google.firebase.database.FirebaseDatabase
 import com.google.firebase.database.ValueEventListener
+import java.util.UUID
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ShoppingScreen(navController: NavController) {
+    val context = LocalContext.current
+    val prefs = context.getSharedPreferences("user_prefs", android.content.Context.MODE_PRIVATE)
+    val userName = prefs.getString("name", "User") ?: "User"
+    val userPhone = prefs.getString("phone", "") ?: ""
+
     var products by remember { mutableStateOf<List<Product>>(emptyList()) }
     var selectedCategory by remember { mutableStateOf("All") }
     
@@ -80,7 +90,7 @@ fun ShoppingScreen(navController: NavController) {
             } else {
                 LazyVerticalGrid(columns = GridCells.Fixed(2), horizontalArrangement = Arrangement.spacedBy(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
                     items(filteredProducts) { product ->
-                        ProductCard(product)
+                        ProductCard(product, userName, userPhone)
                     }
                 }
             }
@@ -89,7 +99,9 @@ fun ShoppingScreen(navController: NavController) {
 }
 
 @Composable
-fun ProductCard(product: Product) {
+fun ProductCard(product: Product, userName: String, userPhone: String) {
+    val context = LocalContext.current
+
     Card(elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)) {
         Column {
             Box(modifier = Modifier.height(120.dp).fillMaxWidth().background(Color.LightGray)) {
@@ -106,8 +118,31 @@ fun ProductCard(product: Product) {
                 Text(product.name, fontWeight = FontWeight.Bold, maxLines = 1)
                 Text("${product.price} ETB", color = Color(0xFF2E7D32), fontWeight = FontWeight.Bold)
                 Spacer(modifier = Modifier.height(8.dp))
-                Button(onClick = { /* Add to Cart */ }, modifier = Modifier.fillMaxWidth().height(36.dp)) {
-                    Text("Buy")
+                
+                Button(
+                    onClick = { 
+                        // --- ORDER LOGIC ---
+                        val db = FirebaseDatabase.getInstance().getReference("deliveries")
+                        val newId = UUID.randomUUID().toString()
+                        
+                        val order = Delivery(
+                            id = newId,
+                            customerName = userName,
+                            customerPhone = userPhone,
+                            restaurantName = "Shop: ${product.name}", // Using Product Name as source for MVP
+                            items = product.name,
+                            price = product.price + 50.0, // Base delivery fee
+                            location = "Arba Minch (GPS)",
+                            status = DeliveryStatus.PENDING
+                        )
+                        
+                        db.child(newId).setValue(order)
+                        Toast.makeText(context, "Ordered ${product.name}! Driver notified.", Toast.LENGTH_LONG).show()
+                    }, 
+                    modifier = Modifier.fillMaxWidth().height(36.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE65100))
+                ) {
+                    Text("Buy Now")
                 }
             }
         }
