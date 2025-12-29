@@ -1,6 +1,7 @@
 plugins {
     application
     kotlin("jvm") version "1.9.0"
+    id("com.github.johnrengelman.shadow") version "8.1.1"
 }
 
 application {
@@ -22,4 +23,13 @@ dependencies {
 
 tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile> {
     kotlinOptions.jvmTarget = "17"
+}
+
+// Rename the output jar for Docker convenience
+tasks {
+    shadowJar {
+        archiveBaseName.set("ktor-server")
+        archiveClassifier.set("")
+        archiveVersion.set("")
+    }
 }
