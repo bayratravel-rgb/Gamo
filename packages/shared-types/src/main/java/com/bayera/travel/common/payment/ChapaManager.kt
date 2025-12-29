@@ -8,8 +8,8 @@ import org.json.JSONObject
 import java.io.IOException
 
 object ChapaManager {
-    // YOUR KEY IS HERE:
-    private const val CHAPA_PUBLIC_KEY = "CHAPUBK-RMBiuos5FVUuNSjGYEANHhjFDJaCkTuk"
+    // 🔒 SECURE: Pointing to your live backend
+    private const val BACKEND_URL = "https://bayra-travel.onrender.com"
     
     fun initializePayment(
         email: String,
@@ -24,21 +24,17 @@ object ChapaManager {
         
         val json = JSONObject()
         json.put("amount", amount.toString())
-        json.put("currency", "ETB")
         json.put("email", email)
-        json.put("first_name", firstName)
-        json.put("last_name", lastName)
-        json.put("tx_ref", txRef)
-        // Redirect URLs (Important for Chapa to know where to go back)
-        json.put("callback_url", "https://google.com")
-        json.put("return_url", "https://google.com")
+        json.put("firstName", firstName)
+        json.put("lastName", lastName)
+        json.put("txRef", txRef)
 
         val body = json.toString().toRequestBody(mediaType)
         
+        // Calling your Ktor Server Endpoint
         val request = Request.Builder()
-            .url("https://api.chapa.co/v1/transaction/initialize")
+            .url("$BACKEND_URL/api/pay")
             .post(body)
-            .addHeader("Authorization", "Bearer $CHAPA_PUBLIC_KEY")
             .addHeader("Content-Type", "application/json")
             .build()
 
@@ -48,13 +44,16 @@ object ChapaManager {
                 val resBody = response.body?.string()
                 
                 if (response.isSuccessful && resBody != null) {
-                    // Parse the Checkout URL
                     val resJson = JSONObject(resBody)
-                    val data = resJson.optJSONObject("data")
-                    val checkoutUrl = data?.optString("checkout_url")
-                    callback(checkoutUrl)
+                    // The server returns { "checkoutUrl": "..." }
+                    val checkoutUrl = resJson.optString("checkoutUrl")
+                    if (checkoutUrl.isNotEmpty()) {
+                        callback(checkoutUrl)
+                    } else {
+                        callback(null)
+                    }
                 } else {
-                    println("Chapa Error: $resBody")
+                    System.out.println("Backend Error: $resBody")
                     callback(null)
                 }
             } catch (e: Exception) {
