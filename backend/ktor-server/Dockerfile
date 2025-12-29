@@ -1,13 +1,12 @@
-FROM gradle:7-jdk17 AS build
+# Stage 1: Build
+FROM gradle:8.5-jdk17 AS build
 COPY --chown=gradle:gradle . /home/gradle/src
 WORKDIR /home/gradle/src
-# Fix: Ensure build task exists or use assemble
-RUN gradle build --no-daemon -x test
+RUN gradle buildFatJar --no-daemon
 
-FROM openjdk:17
+# Stage 2: Run
+FROM eclipse-temurin:17-jre-alpine
 EXPOSE 8080
-# FIX: Use RUN for shell commands
 RUN mkdir /app
-# FIX: Copy the jar correctly (Assuming 'build/libs' contains the jar)
 COPY --from=build /home/gradle/src/build/libs/*.jar /app/ktor-server.jar
 ENTRYPOINT ["java","-jar","/app/ktor-server.jar"]
