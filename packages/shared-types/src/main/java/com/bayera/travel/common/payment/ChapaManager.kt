@@ -1,17 +1,19 @@
 package com.bayera.travel.common.payment
 
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
-import java.io.IOException
 
 object ChapaManager {
-    // 🔒 SECURE: Pointing to your live backend
-    private const val BACKEND_URL = "https://bayra-travel.onrender.com"
+    // ⚠️ ENSURE YOUR KEY IS CORRECT HERE
+    private const val CHAPA_PUBLIC_KEY = "CHAPUBK-RMBiuos5FVUuNSjGYEANHhjFDJaCkTuk"
     
-    fun initializePayment(
+    // Suspend function to run in background
+    suspend fun initializePayment(
         email: String,
         amount: Double,
         firstName: String,
@@ -19,47 +21,43 @@ object ChapaManager {
         txRef: String,
         callback: (String?) -> Unit
     ) {
-        val client = OkHttpClient()
-        val mediaType = "application/json".toMediaType()
-        
-        val json = JSONObject()
-        json.put("amount", amount.toString())
-        json.put("email", email)
-        json.put("firstName", firstName)
-        json.put("lastName", lastName)
-        json.put("txRef", txRef)
-
-        val body = json.toString().toRequestBody(mediaType)
-        
-        // Calling your Ktor Server Endpoint
-        val request = Request.Builder()
-            .url("$BACKEND_URL/api/pay")
-            .post(body)
-            .addHeader("Content-Type", "application/json")
-            .build()
-
-        Thread {
+        withContext(Dispatchers.IO) {
             try {
+                val client = OkHttpClient()
+                val mediaType = "application/json".toMediaType()
+                
+                val json = JSONObject()
+                json.put("amount", amount.toString())
+                json.put("currency", "ETB")
+                json.put("email", email)
+                json.put("first_name", firstName)
+                json.put("last_name", lastName)
+                json.put("tx_ref", txRef)
+                json.put("callback_url", "https://google.com")
+                
+                val body = json.toString().toRequestBody(mediaType)
+                
+                val request = Request.Builder()
+                    .url("https://api.chapa.co/v1/transaction/initialize")
+                    .post(body)
+                    .addHeader("Authorization", "Bearer $CHAPA_PUBLIC_KEY")
+                    .addHeader("Content-Type", "application/json")
+                    .build()
+
                 val response = client.newCall(request).execute()
                 val resBody = response.body?.string()
-                
+
                 if (response.isSuccessful && resBody != null) {
                     val resJson = JSONObject(resBody)
-                    // The server returns { "checkoutUrl": "..." }
-                    val checkoutUrl = resJson.optString("checkoutUrl")
-                    if (checkoutUrl.isNotEmpty()) {
-                        callback(checkoutUrl)
-                    } else {
-                        callback(null)
-                    }
+                    val checkoutUrl = resJson.getJSONObject("data").getString("checkout_url")
+                    withContext(Dispatchers.Main) { callback(checkoutUrl) }
                 } else {
-                    System.out.println("Backend Error: $resBody")
-                    callback(null)
+                    withContext(Dispatchers.Main) { callback(null) }
                 }
             } catch (e: Exception) {
                 e.printStackTrace()
-                callback(null)
+                withContext(Dispatchers.Main) { callback(null) }
             }
-        }.start()
+        }
     }
 }
