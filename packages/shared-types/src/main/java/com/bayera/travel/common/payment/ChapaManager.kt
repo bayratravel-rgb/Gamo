@@ -1,6 +1,6 @@
 package com.bayera.travel.common.payment
 
-import android.util.Log
+import android.os.AsyncTask
 import org.json.JSONObject
 import java.io.BufferedReader
 import java.io.InputStreamReader
@@ -11,13 +11,14 @@ import java.net.URL
 object ChapaManager {
     private const val BACKEND_URL = "https://bayra-travel.onrender.com/api/pay"
 
+    // Callback now takes (url: String?, error: String?)
     fun initializePayment(
         email: String,
         amount: Double,
         firstName: String,
         lastName: String,
         txRef: String,
-        callback: (String?, String?) -> Unit // Changed to return (URL?, Error?)
+        callback: (String?, String?) -> Unit 
     ) {
         Thread {
             try {
@@ -26,6 +27,7 @@ object ChapaManager {
                 conn.requestMethod = "POST"
                 conn.setRequestProperty("Content-Type", "application/json")
                 conn.doOutput = true
+                conn.doInput = true
 
                 val json = JSONObject()
                 json.put("amount", amount)
@@ -44,33 +46,20 @@ object ChapaManager {
                     val reader = BufferedReader(InputStreamReader(conn.inputStream))
                     val response = StringBuilder()
                     var line: String?
-                    while (reader.readLine().also { line = it } != null) {
-                        response.append(line)
-                    }
+                    while (reader.readLine().also { line = it } != null) response.append(line)
                     reader.close()
 
                     val resJson = JSONObject(response.toString())
-                    // Check if server sent a checkout URL or an error message inside the JSON
                     val checkoutUrl = resJson.optString("checkoutUrl")
-                    if (checkoutUrl.isNotEmpty()) {
-                        callback(checkoutUrl, null)
-                    } else {
-                        // Sometimes server returns 200 but with error message
-                        callback(null, "Server said: $response")
-                    }
+                    
+                    if (checkoutUrl.isNotEmpty()) callback(checkoutUrl, null)
+                    else callback(null, "No URL in response")
+                    
                 } else {
-                    // Read Error Stream
-                    val reader = BufferedReader(InputStreamReader(conn.errorStream))
-                    val errorResponse = StringBuilder()
-                    var line: String?
-                    while (reader.readLine().also { line = it } != null) {
-                        errorResponse.append(line)
-                    }
-                    callback(null, "HTTP $responseCode: $errorResponse")
+                    callback(null, "Server Error: $responseCode")
                 }
             } catch (e: Exception) {
-                e.printStackTrace()
-                callback(null, "Exception: ${e.message}")
+                callback(null, "Network Error: ${e.message}")
             }
         }.start()
     }
