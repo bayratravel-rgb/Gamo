@@ -15,46 +15,34 @@ import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
 
-data class PaymentRequest(
-    val email: String,
-    val amount: Double,
-    val firstName: String,
-    val lastName: String,
-    val txRef: String
-)
-
+data class PaymentRequest(val email: String, val amount: Double, val firstName: String, val lastName: String, val txRef: String)
 data class PaymentResponse(val checkoutUrl: String)
 
 fun main() {
-    embeddedServer(Netty, port = 8080) {
-        install(ContentNegotiation) {
-            gson { }
-        }
+    // FIX: Listen on 0.0.0.0 (Required for Render/Docker)
+    embeddedServer(Netty, port = 8080, host = "0.0.0.0") {
+        install(ContentNegotiation) { gson {} }
         
         routing {
-            get("/") {
-                call.respondText("Bayera Backend is Running! 🚀")
-            }
-
+            get("/") { call.respondText("Bayera Backend is Running! 🚀") }
+            
             post("/api/pay") {
+                // ... (Payment Logic - Keeping it same as before) ...
                 try {
-                    println("Received Payment Request...") // LOG 1
-                    
                     val req = call.receive<PaymentRequest>()
-                    println("Request Data: $req") // LOG 2
-                    
+                    println("Received Payment Request: $req") // LOGGING
+
                     val secretKey = System.getenv("CHAPA_SECRET_KEY")
                     if (secretKey.isNullOrEmpty()) {
-                        println("CRITICAL ERROR: CHAPA_SECRET_KEY is missing or empty!") // LOG 3
-                        call.respond(HttpStatusCode.InternalServerError, "Server Config Error: Missing Secret Key")
+                        println("Error: Missing Secret Key")
+                        call.respond(HttpStatusCode.InternalServerError, "Server Config Error")
                         return@post
                     }
 
-                    println("Calling Chapa API...") // LOG 4
                     val client = OkHttpClient()
                     val mediaType = "application/json".toMediaType()
                     val json = JSONObject()
-                    json.put("amount", req.amount.toString())
+                    json.put("amount", req.amount)
                     json.put("currency", "ETB")
                     json.put("email", req.email)
                     json.put("first_name", req.firstName)
@@ -68,31 +56,22 @@ fun main() {
                         .url("https://api.chapa.co/v1/transaction/initialize")
                         .post(body)
                         .addHeader("Authorization", "Bearer $secretKey")
-                        .addHeader("Content-Type", "application/json")
                         .build()
 
                     val response = client.newCall(request).execute()
                     val resBody = response.body?.string() ?: ""
-                    
-                    println("Chapa Response Code: ${response.code}") // LOG 5
-                    println("Chapa Response Body: $resBody") // LOG 6
+                    println("Chapa Response: $resBody")
 
                     if (response.isSuccessful) {
                         val resJson = JSONObject(resBody)
-                        val data = resJson.optJSONObject("data")
-                        val url = data?.optString("checkout_url")
-                        
-                        if (!url.isNullOrEmpty()) {
-                            call.respond(PaymentResponse(url))
-                        } else {
-                            call.respond(HttpStatusCode.InternalServerError, "Chapa Error: No URL returned")
-                        }
+                        val url = resJson.getJSONObject("data").getString("checkout_url")
+                        call.respond(PaymentResponse(url))
                     } else {
-                        call.respond(HttpStatusCode.InternalServerError, "Chapa Failed: $resBody")
+                        call.respond(HttpStatusCode.InternalServerError, resBody)
                     }
                 } catch (e: Exception) {
-                    e.printStackTrace() // Print stack trace to logs
-                    call.respond(HttpStatusCode.InternalServerError, "Exception: ${e.message}")
+                    println("Exception: ${e.message}")
+                    call.respond(HttpStatusCode.InternalServerError, e.message ?: "Unknown")
                 }
             }
         }
