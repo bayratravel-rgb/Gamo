@@ -1,5 +1,6 @@
 package com.bayera.travel.common.payment
 
+import android.util.Log
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -8,14 +9,8 @@ import org.json.JSONObject
 import java.util.concurrent.TimeUnit
 
 object ChapaManager {
+    // ENSURE THIS MATCHES YOUR BROWSER URL EXACTLY
     private const val BACKEND_URL = "https://bayra-travel.onrender.com/api/pay"
-    
-    // Config: Allow 60 seconds timeout for Render Cold Start
-    private val client = OkHttpClient.Builder()
-        .connectTimeout(60, TimeUnit.SECONDS)
-        .readTimeout(60, TimeUnit.SECONDS)
-        .writeTimeout(60, TimeUnit.SECONDS)
-        .build()
     
     fun initializePayment(
         email: String,
@@ -25,9 +20,15 @@ object ChapaManager {
         txRef: String,
         callback: (String?) -> Unit
     ) {
-        val mediaType = "application/json".toMediaType()
+        val client = OkHttpClient.Builder()
+            .connectTimeout(30, TimeUnit.SECONDS) // Give it time to wake up
+            .readTimeout(30, TimeUnit.SECONDS)
+            .build()
+
+        val mediaType = "application/json; charset=utf-8".toMediaType()
+        
         val json = JSONObject()
-        json.put("amount", amount.toString())
+        json.put("amount", amount)
         json.put("email", email)
         json.put("firstName", firstName)
         json.put("lastName", lastName)
@@ -43,23 +44,23 @@ object ChapaManager {
         Thread {
             try {
                 val response = client.newCall(request).execute()
-                val resBody = response.body?.string()
+                val resBody = response.body?.string() ?: ""
                 
-                if (response.isSuccessful && resBody != null) {
+                if (response.isSuccessful) {
                     val resJson = JSONObject(resBody)
-                    // Check if key exists before accessing
-                    if (resJson.has("checkoutUrl")) {
-                        val checkoutUrl = resJson.getString("checkoutUrl")
+                    val checkoutUrl = resJson.optString("checkoutUrl")
+                    if (checkoutUrl.isNotEmpty()) {
                         callback(checkoutUrl)
                     } else {
-                        println("JSON missing checkoutUrl: $resBody")
+                        Log.e("Chapa", "No checkoutUrl in response: $resBody")
                         callback(null)
                     }
                 } else {
-                    println("Backend Error Code: ${response.code} Body: $resBody")
+                    Log.e("Chapa", "Server Error ${response.code}: $resBody")
                     callback(null)
                 }
             } catch (e: Exception) {
+                Log.e("Chapa", "Network Error: ${e.message}")
                 e.printStackTrace()
                 callback(null)
             }
