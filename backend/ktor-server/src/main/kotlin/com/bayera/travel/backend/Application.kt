@@ -36,48 +36,63 @@ fun main() {
                 call.respondText("Bayera Backend is Running! 🚀")
             }
 
-            // SECURE ENDPOINT
             post("/api/pay") {
-                val req = call.receive<PaymentRequest>()
-                
-                // 1. Get Key from Environment Variable (SAFE!)
-                // On your computer/cloud, you set this variable. It is NOT in the code.
-                val secretKey = System.getenv("CHAPA_SECRET_KEY") ?: "CHASECK_TEST-YourFallbackKey"
-
-                // 2. Call Chapa (Server to Server)
-                val client = OkHttpClient()
-                val mediaType = "application/json".toMediaType()
-                val json = JSONObject()
-                json.put("amount", req.amount.toString())
-                json.put("currency", "ETB")
-                json.put("email", req.email)
-                json.put("first_name", req.firstName)
-                json.put("last_name", req.lastName)
-                json.put("tx_ref", req.txRef)
-                json.put("callback_url", "https://bayera.com/callback")
-                json.put("return_url", "https://bayera.com/return")
-
-                val body = json.toString().toRequestBody(mediaType)
-                val request = Request.Builder()
-                    .url("https://api.chapa.co/v1/transaction/initialize")
-                    .post(body)
-                    .addHeader("Authorization", "Bearer $secretKey")
-                    .addHeader("Content-Type", "application/json")
-                    .build()
-
                 try {
-                    val response = client.newCall(request).execute()
-                    val resBody = response.body?.string()
+                    println("Received Payment Request...") // LOG 1
                     
-                    if (response.isSuccessful && resBody != null) {
+                    val req = call.receive<PaymentRequest>()
+                    println("Request Data: $req") // LOG 2
+                    
+                    val secretKey = System.getenv("CHAPA_SECRET_KEY")
+                    if (secretKey.isNullOrEmpty()) {
+                        println("CRITICAL ERROR: CHAPA_SECRET_KEY is missing or empty!") // LOG 3
+                        call.respond(HttpStatusCode.InternalServerError, "Server Config Error: Missing Secret Key")
+                        return@post
+                    }
+
+                    println("Calling Chapa API...") // LOG 4
+                    val client = OkHttpClient()
+                    val mediaType = "application/json".toMediaType()
+                    val json = JSONObject()
+                    json.put("amount", req.amount.toString())
+                    json.put("currency", "ETB")
+                    json.put("email", req.email)
+                    json.put("first_name", req.firstName)
+                    json.put("last_name", req.lastName)
+                    json.put("tx_ref", req.txRef)
+                    json.put("callback_url", "https://google.com")
+                    json.put("return_url", "https://google.com")
+
+                    val body = json.toString().toRequestBody(mediaType)
+                    val request = Request.Builder()
+                        .url("https://api.chapa.co/v1/transaction/initialize")
+                        .post(body)
+                        .addHeader("Authorization", "Bearer $secretKey")
+                        .addHeader("Content-Type", "application/json")
+                        .build()
+
+                    val response = client.newCall(request).execute()
+                    val resBody = response.body?.string() ?: ""
+                    
+                    println("Chapa Response Code: ${response.code}") // LOG 5
+                    println("Chapa Response Body: $resBody") // LOG 6
+
+                    if (response.isSuccessful) {
                         val resJson = JSONObject(resBody)
-                        val url = resJson.getJSONObject("data").getString("checkout_url")
-                        call.respond(PaymentResponse(url))
+                        val data = resJson.optJSONObject("data")
+                        val url = data?.optString("checkout_url")
+                        
+                        if (!url.isNullOrEmpty()) {
+                            call.respond(PaymentResponse(url))
+                        } else {
+                            call.respond(HttpStatusCode.InternalServerError, "Chapa Error: No URL returned")
+                        }
                     } else {
                         call.respond(HttpStatusCode.InternalServerError, "Chapa Failed: $resBody")
                     }
                 } catch (e: Exception) {
-                    call.respond(HttpStatusCode.InternalServerError, e.message ?: "Unknown Error")
+                    e.printStackTrace() // Print stack trace to logs
+                    call.respond(HttpStatusCode.InternalServerError, "Exception: ${e.message}")
                 }
             }
         }
