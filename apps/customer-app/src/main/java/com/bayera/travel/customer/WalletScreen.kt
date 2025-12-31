@@ -4,10 +4,7 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountBalanceWallet
 import androidx.compose.material.icons.filled.ArrowBack
@@ -24,7 +21,6 @@ import androidx.navigation.NavController
 import com.bayera.travel.common.payment.ChapaManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import java.util.UUID
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -67,9 +63,6 @@ fun WalletScreen(navController: NavController) {
 
             Spacer(modifier = Modifier.height(32.dp))
             
-            Text("Top Up Balance", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-            Spacer(modifier = Modifier.height(16.dp))
-            
             OutlinedTextField(
                 value = amountText,
                 onValueChange = { amountText = it },
@@ -89,26 +82,20 @@ fun WalletScreen(navController: NavController) {
                         val email = "customer@bayera.com" 
                         val fName = prefs.getString("name", "User") ?: "User"
                         
-                        // Using IO Scope for Network
                         scope.launch(Dispatchers.IO) {
-                            ChapaManager.initializePayment(email, amount, fName, "Bayera", txRef) { url ->
-                                // Switch back to Main Thread for UI updates
+                            // Update callback signature to receive error
+                            ChapaManager.initializePayment(email, amount, fName, "Bayera", txRef) { url, error ->
                                 scope.launch(Dispatchers.Main) {
                                     isLoading = false
-                                    if (!url.isNullOrEmpty()) {
-                                        try {
-                                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
-                                            context.startActivity(intent)
-                                            
-                                            // Optimistic Update (MVP Only)
-                                            val newBal = balance + amount.toFloat()
-                                            prefs.edit().putFloat("wallet_balance", newBal).apply()
-                                            balance = newBal
-                                        } catch (e: Exception) {
-                                            Toast.makeText(context, "No Browser Found", Toast.LENGTH_LONG).show()
-                                        }
+                                    if (url != null) {
+                                        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
+                                        context.startActivity(intent)
+                                        val newBal = balance + amount.toFloat()
+                                        prefs.edit().putFloat("wallet_balance", newBal).apply()
+                                        balance = newBal
                                     } else {
-                                        Toast.makeText(context, "Payment Failed. Server Error.", Toast.LENGTH_LONG).show()
+                                        // SHOW THE EXACT ERROR ON SCREEN
+                                        Toast.makeText(context, "Failed: $error", Toast.LENGTH_LONG).show()
                                     }
                                 }
                             }

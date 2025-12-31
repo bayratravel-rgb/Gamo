@@ -1,6 +1,6 @@
 package com.bayera.travel.common.payment
 
-import android.os.AsyncTask
+import android.util.Log
 import org.json.JSONObject
 import java.io.BufferedReader
 import java.io.InputStreamReader
@@ -17,9 +17,8 @@ object ChapaManager {
         firstName: String,
         lastName: String,
         txRef: String,
-        callback: (String?) -> Unit
+        callback: (String?, String?) -> Unit // Changed to return (URL?, Error?)
     ) {
-        // Run network on background thread manually
         Thread {
             try {
                 val url = URL(BACKEND_URL)
@@ -27,7 +26,6 @@ object ChapaManager {
                 conn.requestMethod = "POST"
                 conn.setRequestProperty("Content-Type", "application/json")
                 conn.doOutput = true
-                conn.doInput = true
 
                 val json = JSONObject()
                 json.put("amount", amount)
@@ -52,17 +50,27 @@ object ChapaManager {
                     reader.close()
 
                     val resJson = JSONObject(response.toString())
+                    // Check if server sent a checkout URL or an error message inside the JSON
                     val checkoutUrl = resJson.optString("checkoutUrl")
-                    
-                    // Callback must run on this thread (Caller handles UI switch)
-                    callback(checkoutUrl)
+                    if (checkoutUrl.isNotEmpty()) {
+                        callback(checkoutUrl, null)
+                    } else {
+                        // Sometimes server returns 200 but with error message
+                        callback(null, "Server said: $response")
+                    }
                 } else {
-                    println("Server Error: $responseCode")
-                    callback(null)
+                    // Read Error Stream
+                    val reader = BufferedReader(InputStreamReader(conn.errorStream))
+                    val errorResponse = StringBuilder()
+                    var line: String?
+                    while (reader.readLine().also { line = it } != null) {
+                        errorResponse.append(line)
+                    }
+                    callback(null, "HTTP $responseCode: $errorResponse")
                 }
             } catch (e: Exception) {
                 e.printStackTrace()
-                callback(null)
+                callback(null, "Exception: ${e.message}")
             }
         }.start()
     }
