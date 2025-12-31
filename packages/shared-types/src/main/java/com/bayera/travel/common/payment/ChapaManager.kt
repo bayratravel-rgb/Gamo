@@ -1,17 +1,16 @@
 package com.bayera.travel.common.payment
 
-import android.util.Log
-import okhttp3.MediaType.Companion.toMediaType
-import okhttp3.OkHttpClient
-import okhttp3.Request
-import okhttp3.RequestBody.Companion.toRequestBody
+import android.os.AsyncTask
 import org.json.JSONObject
-import java.util.concurrent.TimeUnit
+import java.io.BufferedReader
+import java.io.InputStreamReader
+import java.io.OutputStreamWriter
+import java.net.HttpURLConnection
+import java.net.URL
 
 object ChapaManager {
-    // ENSURE THIS MATCHES YOUR BROWSER URL EXACTLY
     private const val BACKEND_URL = "https://bayra-travel.onrender.com/api/pay"
-    
+
     fun initializePayment(
         email: String,
         amount: Double,
@@ -20,47 +19,48 @@ object ChapaManager {
         txRef: String,
         callback: (String?) -> Unit
     ) {
-        val client = OkHttpClient.Builder()
-            .connectTimeout(30, TimeUnit.SECONDS) // Give it time to wake up
-            .readTimeout(30, TimeUnit.SECONDS)
-            .build()
-
-        val mediaType = "application/json; charset=utf-8".toMediaType()
-        
-        val json = JSONObject()
-        json.put("amount", amount)
-        json.put("email", email)
-        json.put("firstName", firstName)
-        json.put("lastName", lastName)
-        json.put("txRef", txRef)
-
-        val body = json.toString().toRequestBody(mediaType)
-        
-        val request = Request.Builder()
-            .url(BACKEND_URL)
-            .post(body)
-            .build()
-
+        // Run network on background thread manually
         Thread {
             try {
-                val response = client.newCall(request).execute()
-                val resBody = response.body?.string() ?: ""
-                
-                if (response.isSuccessful) {
-                    val resJson = JSONObject(resBody)
-                    val checkoutUrl = resJson.optString("checkoutUrl")
-                    if (checkoutUrl.isNotEmpty()) {
-                        callback(checkoutUrl)
-                    } else {
-                        Log.e("Chapa", "No checkoutUrl in response: $resBody")
-                        callback(null)
+                val url = URL(BACKEND_URL)
+                val conn = url.openConnection() as HttpURLConnection
+                conn.requestMethod = "POST"
+                conn.setRequestProperty("Content-Type", "application/json")
+                conn.doOutput = true
+                conn.doInput = true
+
+                val json = JSONObject()
+                json.put("amount", amount)
+                json.put("email", email)
+                json.put("firstName", firstName)
+                json.put("lastName", lastName)
+                json.put("txRef", txRef)
+
+                val writer = OutputStreamWriter(conn.outputStream)
+                writer.write(json.toString())
+                writer.flush()
+                writer.close()
+
+                val responseCode = conn.responseCode
+                if (responseCode == 200) {
+                    val reader = BufferedReader(InputStreamReader(conn.inputStream))
+                    val response = StringBuilder()
+                    var line: String?
+                    while (reader.readLine().also { line = it } != null) {
+                        response.append(line)
                     }
+                    reader.close()
+
+                    val resJson = JSONObject(response.toString())
+                    val checkoutUrl = resJson.optString("checkoutUrl")
+                    
+                    // Callback must run on this thread (Caller handles UI switch)
+                    callback(checkoutUrl)
                 } else {
-                    Log.e("Chapa", "Server Error ${response.code}: $resBody")
+                    println("Server Error: $responseCode")
                     callback(null)
                 }
             } catch (e: Exception) {
-                Log.e("Chapa", "Network Error: ${e.message}")
                 e.printStackTrace()
                 callback(null)
             }
