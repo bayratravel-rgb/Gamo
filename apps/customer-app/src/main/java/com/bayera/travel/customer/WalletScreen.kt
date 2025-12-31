@@ -7,7 +7,6 @@ import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
-// FIXED: Added missing import for KeyboardOptions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountBalanceWallet
@@ -32,7 +31,6 @@ import java.util.UUID
 @Composable
 fun WalletScreen(navController: NavController) {
     val context = LocalContext.current
-    val scope = rememberCoroutineScope()
     val prefs = context.getSharedPreferences("user_prefs", Context.MODE_PRIVATE)
     
     var balance by remember { mutableFloatStateOf(prefs.getFloat("wallet_balance", 0.0f)) }
@@ -89,28 +87,31 @@ fun WalletScreen(navController: NavController) {
                         val txRef = "TX-${UUID.randomUUID().toString().take(10)}"
                         val email = "customer@bayera.com" 
                         val fName = prefs.getString("name", "User") ?: "User"
+                        val lName = "Customer" // Added missing lastName argument
                         
-                        // Using IO Scope for Network
-                        scope.launch(Dispatchers.IO) {
-                            ChapaManager.initializePayment(email, amount, fName, "Bayera", txRef) { url ->
-                                // Switch back to Main Thread for UI updates
-                                scope.launch(Dispatchers.Main) {
-                                    isLoading = false
-                                    if (!url.isNullOrEmpty()) {
-                                        try {
-                                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
-                                            context.startActivity(intent)
-                                            
-                                            // Optimistic Update (MVP Only)
-                                            val newBal = balance + amount.toFloat()
-                                            prefs.edit().putFloat("wallet_balance", newBal).apply()
-                                            balance = newBal
-                                        } catch (e: Exception) {
-                                            Toast.makeText(context, "No Browser Found", Toast.LENGTH_LONG).show()
-                                        }
-                                    } else {
-                                        Toast.makeText(context, "Payment Failed. Server Error.", Toast.LENGTH_LONG).show()
+                        // FIX: Ensure arguments match ChapaManager.initializePayment exactly
+                        ChapaManager.initializePayment(email, amount, fName, lName, txRef) { url ->
+                            // Use Launch inside Composable scope to update UI
+                            // But since this callback is from a Thread, we need to be careful.
+                            // Compose state updates are thread-safe, but Toast/Intent needs UI thread.
+                            
+                            // We can't launch coroutine here easily without scope. 
+                            // Using mainLooper handler is safer for non-composable callback.
+                            android.os.Handler(android.os.Looper.getMainLooper()).post {
+                                isLoading = false
+                                if (!url.isNullOrEmpty()) {
+                                    try {
+                                        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
+                                        context.startActivity(intent)
+                                        
+                                        val newBal = balance + amount.toFloat()
+                                        prefs.edit().putFloat("wallet_balance", newBal).apply()
+                                        balance = newBal
+                                    } catch (e: Exception) {
+                                        Toast.makeText(context, "No Browser Found", Toast.LENGTH_LONG).show()
                                     }
+                                } else {
+                                    Toast.makeText(context, "Payment Failed. Server Error.", Toast.LENGTH_LONG).show()
                                 }
                             }
                         }
