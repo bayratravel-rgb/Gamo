@@ -5,10 +5,17 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
+import java.util.concurrent.TimeUnit
 
 object ChapaManager {
-    // YOUR LIVE BACKEND URL
     private const val BACKEND_URL = "https://bayra-travel.onrender.com/api/pay"
+    
+    // Config: Allow 60 seconds timeout for Render Cold Start
+    private val client = OkHttpClient.Builder()
+        .connectTimeout(60, TimeUnit.SECONDS)
+        .readTimeout(60, TimeUnit.SECONDS)
+        .writeTimeout(60, TimeUnit.SECONDS)
+        .build()
     
     fun initializePayment(
         email: String,
@@ -18,9 +25,7 @@ object ChapaManager {
         txRef: String,
         callback: (String?) -> Unit
     ) {
-        val client = OkHttpClient()
         val mediaType = "application/json".toMediaType()
-        
         val json = JSONObject()
         json.put("amount", amount.toString())
         json.put("email", email)
@@ -42,11 +47,16 @@ object ChapaManager {
                 
                 if (response.isSuccessful && resBody != null) {
                     val resJson = JSONObject(resBody)
-                    val checkoutUrl = resJson.optString("checkoutUrl")
-                    callback(checkoutUrl)
+                    // Check if key exists before accessing
+                    if (resJson.has("checkoutUrl")) {
+                        val checkoutUrl = resJson.getString("checkoutUrl")
+                        callback(checkoutUrl)
+                    } else {
+                        println("JSON missing checkoutUrl: $resBody")
+                        callback(null)
+                    }
                 } else {
-                    // Log error for debugging
-                    println("Backend Error: " + resBody)
+                    println("Backend Error Code: ${response.code} Body: $resBody")
                     callback(null)
                 }
             } catch (e: Exception) {
