@@ -22,14 +22,16 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import com.bayera.travel.common.payment.ChapaManager
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.util.UUID
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun WalletScreen(navController: NavController) {
     val context = LocalContext.current
-    val scope = rememberCoroutineScope() // Coroutine Scope
+    val scope = rememberCoroutineScope()
     val prefs = context.getSharedPreferences("user_prefs", Context.MODE_PRIVATE)
     
     var balance by remember { mutableFloatStateOf(prefs.getFloat("wallet_balance", 0.0f)) }
@@ -48,7 +50,7 @@ fun WalletScreen(navController: NavController) {
             
             Card(
                 modifier = Modifier.fillMaxWidth().height(140.dp),
-                colors = CardDefaults.cardColors(containerColor = Color(0xFF2E7D32)),
+                colors = CardDefaults.cardColors(containerColor = Color(0xFF2E7D32)), 
                 elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
             ) {
                 Column(
@@ -87,18 +89,27 @@ fun WalletScreen(navController: NavController) {
                         val email = "customer@bayera.com" 
                         val fName = prefs.getString("name", "User") ?: "User"
                         
-                        // Launch Coroutine
-                        scope.launch {
+                        // Using IO Scope for Network
+                        scope.launch(Dispatchers.IO) {
                             ChapaManager.initializePayment(email, amount, fName, "Bayera", txRef) { url ->
-                                isLoading = false
-                                if (url != null) {
-                                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
-                                    context.startActivity(intent)
-                                    val newBal = balance + amount.toFloat()
-                                    prefs.edit().putFloat("wallet_balance", newBal).apply()
-                                    balance = newBal
-                                } else {
-                                    Toast.makeText(context, "Payment Failed. Check Internet.", Toast.LENGTH_LONG).show()
+                                // Switch back to Main Thread for UI updates
+                                scope.launch(Dispatchers.Main) {
+                                    isLoading = false
+                                    if (!url.isNullOrEmpty()) {
+                                        try {
+                                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
+                                            context.startActivity(intent)
+                                            
+                                            // Optimistic Update (MVP Only)
+                                            val newBal = balance + amount.toFloat()
+                                            prefs.edit().putFloat("wallet_balance", newBal).apply()
+                                            balance = newBal
+                                        } catch (e: Exception) {
+                                            Toast.makeText(context, "No Browser Found", Toast.LENGTH_LONG).show()
+                                        }
+                                    } else {
+                                        Toast.makeText(context, "Payment Failed. Server Error.", Toast.LENGTH_LONG).show()
+                                    }
                                 }
                             }
                         }
