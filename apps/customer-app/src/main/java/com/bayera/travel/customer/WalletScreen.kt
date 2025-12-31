@@ -4,9 +4,7 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountBalanceWallet
@@ -47,7 +45,6 @@ fun WalletScreen(navController: NavController) {
             Card(modifier = Modifier.fillMaxWidth().height(140.dp), colors = CardDefaults.cardColors(containerColor = Color(0xFF2E7D32)), elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)) {
                 Column(modifier = Modifier.fillMaxSize(), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
                     Icon(Icons.Default.AccountBalanceWallet, null, tint = Color.White, modifier = Modifier.size(40.dp))
-                    Spacer(modifier = Modifier.height(8.dp))
                     Text("Current Balance", color = Color.White.copy(alpha = 0.8f))
                     Text("$balance ETB", style = MaterialTheme.typography.headlineLarge, color = Color.White, fontWeight = FontWeight.Bold)
                 }
@@ -65,11 +62,12 @@ fun WalletScreen(navController: NavController) {
                     if (amount != null && amount >= 5.0) {
                         isLoading = true
                         val txRef = "TX-${UUID.randomUUID().toString().take(10)}"
-                        val email = "customer@bayera.com" 
+                        
+                        // FIX: Using your verified email
+                        val email = "Yeabkalkassahun21@gmail.com" 
                         val fName = prefs.getString("name", "User") ?: "User"
                         val lName = "Customer"
 
-                        // UPDATED CALL with 2 Params (url, error)
                         ChapaManager.initializePayment(email, amount, fName, lName, txRef) { url, error ->
                             android.os.Handler(android.os.Looper.getMainLooper()).post {
                                 isLoading = false
@@ -82,11 +80,11 @@ fun WalletScreen(navController: NavController) {
                                         balance = newBal
                                     } catch (e: Exception) { Toast.makeText(context, "No Browser Found", Toast.LENGTH_LONG).show() }
                                 } else {
-                                    Toast.makeText(context, "Payment Failed: $error", Toast.LENGTH_LONG).show()
+                                    Toast.makeText(context, "Failed: ${error ?: "Unknown Error"}", Toast.LENGTH_LONG).show()
                                 }
                             }
                         }
-                    } else { Toast.makeText(context, "Enter valid amount (> 5 ETB)", Toast.LENGTH_SHORT).show() }
+                    } else { Toast.makeText(context, "Enter > 5 ETB", Toast.LENGTH_SHORT).show() }
                 },
                 modifier = Modifier.fillMaxWidth().height(50.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1E88E5)),
