@@ -16,6 +16,7 @@ import androidx.compose.material.icons.filled.ArrowForward
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Place
 import androidx.compose.material.icons.filled.ShoppingCart
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -67,16 +68,8 @@ fun DriverSuperDashboard(navController: NavController) {
     Scaffold(
         bottomBar = {
             NavigationBar(containerColor = Color.White) {
-                NavigationBarItem(
-                    icon = { Icon(Icons.Default.Home, null) }, label = { Text("Rides") },
-                    selected = selectedTab == 0, onClick = { selectedTab = 0 },
-                    colors = NavigationBarItemDefaults.colors(selectedIconColor = Color(0xFF2E7D32))
-                )
-                NavigationBarItem(
-                    icon = { Icon(Icons.Default.ShoppingCart, null) }, label = { Text("Delivery") },
-                    selected = selectedTab == 1, onClick = { selectedTab = 1 },
-                    colors = NavigationBarItemDefaults.colors(selectedIconColor = Color(0xFFE65100))
-                )
+                NavigationBarItem(icon = { Icon(Icons.Default.Home, null) }, label = { Text("Rides") }, selected = selectedTab == 0, onClick = { selectedTab = 0 })
+                NavigationBarItem(icon = { Icon(Icons.Default.ShoppingCart, null) }, label = { Text("Delivery") }, selected = selectedTab == 1, onClick = { selectedTab = 1 })
             }
         }
     ) { padding ->
@@ -125,9 +118,7 @@ fun RideRequestsScreen(driverName: String) {
         ActiveJobCard(currentJob!!)
     } else {
         Text("Incoming Rides", style = MaterialTheme.typography.headlineSmall, color = Color(0xFF2E7D32), fontWeight = FontWeight.Bold)
-        Spacer(modifier = Modifier.height(16.dp))
-        if (activeTrips.isEmpty()) Text("Waiting for rides...", color = Color.Gray)
-        else LazyColumn { items(activeTrips) { trip -> RideCard(trip, driverName) } }
+        LazyColumn { items(activeTrips) { trip -> RideCard(trip, driverName) } }
     }
 }
 
@@ -140,52 +131,37 @@ fun ActiveJobCard(trip: Trip) {
         Column(modifier = Modifier.padding(16.dp)) {
             Text("CURRENT TRIP", fontWeight = FontWeight.Bold, color = Color(0xFF1B5E20))
             Spacer(modifier = Modifier.height(8.dp))
-            Text("👤 ${trip.customerId}", fontWeight = FontWeight.Bold)
+            Text("👤 ${trip.customerId}")
+            Text("📍 ${trip.pickupLocation.address}")
+            Text("🏁 ${trip.dropoffLocation.address}")
             
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(16.dp))
             
-            // --- PHASE 1: PICKUP ---
+            // --- PAYMENT STATUS CHECK ---
+            if (trip.paymentStatus == "PAID_WALLET") {
+                 Row(verticalAlignment = Alignment.CenterVertically) {
+                     Icon(Icons.Default.CheckCircle, null, tint = Color(0xFF2E7D32))
+                     Spacer(modifier = Modifier.width(8.dp))
+                     Text("PAID VIA WALLET", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = Color(0xFF2E7D32))
+                 }
+            } else {
+                 Text("💰 Collect Cash: ${trip.price} ETB", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            }
+            
+            Spacer(modifier = Modifier.height(16.dp))
+            
             if (trip.status == TripStatus.ACCEPTED) {
-                Text("🟢 PICKUP: ${trip.pickupLocation.address}", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                if (trip.pickupNotes.isNotEmpty()) Text("📝 Note: ${trip.pickupNotes}", color = Color.Red)
-                
-                Spacer(modifier = Modifier.height(16.dp))
-                Button(
-                    onClick = { 
-                        val uri = "google.navigation:q=${trip.pickupLocation.lat},${trip.pickupLocation.lng}"
-                        startNav(context, uri)
-                    },
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1976D2)),
-                    modifier = Modifier.fillMaxWidth()
-                ) { Icon(Icons.Default.Place, null); Spacer(modifier = Modifier.width(8.dp)); Text("NAVIGATE TO PICKUP") }
-                
-                Spacer(modifier = Modifier.height(8.dp))
-                Button(
-                    onClick = { db.child("status").setValue(TripStatus.IN_PROGRESS) },
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2E7D32)),
-                    modifier = Modifier.fillMaxWidth()
-                ) { Text("I HAVE ARRIVED (Start Trip)") }
-            
-            } else if (trip.status == TripStatus.IN_PROGRESS) {
-                // --- PHASE 2: DROPOFF ---
-                Text("🔴 DROPOFF: ${trip.dropoffLocation.address}", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                
-                Spacer(modifier = Modifier.height(16.dp))
-                Button(
-                    onClick = { 
-                        val uri = "google.navigation:q=${trip.dropoffLocation.lat},${trip.dropoffLocation.lng}"
-                        startNav(context, uri)
-                    },
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFD32F2F)),
-                    modifier = Modifier.fillMaxWidth()
-                ) { Icon(Icons.Default.ArrowForward, null); Spacer(modifier = Modifier.width(8.dp)); Text("NAVIGATE TO DROP-OFF") }
-                
-                Spacer(modifier = Modifier.height(8.dp))
-                Button(
-                    onClick = { db.child("status").setValue(TripStatus.COMPLETED) },
-                    colors = ButtonDefaults.buttonColors(containerColor = Color.Black),
-                    modifier = Modifier.fillMaxWidth()
-                ) { Text("COMPLETE TRIP") }
+                Button(onClick = { 
+                    val uri = "google.navigation:q=${trip.pickupLocation.lat},${trip.pickupLocation.lng}"
+                    startNav(context, uri)
+                }, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1976D2)), modifier = Modifier.fillMaxWidth()) { Text("NAVIGATE TO PICKUP") }
+                Button(onClick = { db.child("status").setValue(TripStatus.IN_PROGRESS) }, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2E7D32)), modifier = Modifier.fillMaxWidth()) { Text("START TRIP") }
+            } else {
+                Button(onClick = { 
+                    val uri = "google.navigation:q=${trip.dropoffLocation.lat},${trip.dropoffLocation.lng}"
+                    startNav(context, uri)
+                }, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFD32F2F)), modifier = Modifier.fillMaxWidth()) { Text("NAVIGATE TO DROP-OFF") }
+                Button(onClick = { db.child("status").setValue(TripStatus.COMPLETED) }, colors = ButtonDefaults.buttonColors(containerColor = Color.Black), modifier = Modifier.fillMaxWidth()) { Text("COMPLETE TRIP") }
             }
         }
     }
@@ -197,12 +173,9 @@ fun startNav(context: Context, uri: String) {
     try { context.startActivity(intent) } catch (e: Exception) { Toast.makeText(context, "Google Maps not found", Toast.LENGTH_SHORT).show() }
 }
 
-// ... (Rest of Delivery Logic & RideCard remains the same, I will append it to ensure compilation)
 @Composable
 fun DeliveryRequestsScreen(driverName: String) {
-    Text("Incoming Deliveries", style = MaterialTheme.typography.headlineSmall, color = Color(0xFFE65100), fontWeight = FontWeight.Bold)
-    Spacer(modifier = Modifier.height(16.dp))
-    Text("No delivery orders yet.", color = Color.Gray)
+    Text("Delivery Orders", style = MaterialTheme.typography.headlineSmall, color = Color(0xFFE65100))
 }
 
 @Composable
@@ -210,13 +183,12 @@ fun RideCard(trip: Trip, driverId: String) {
     val context = LocalContext.current
     Card(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp), colors = CardDefaults.cardColors(containerColor = Color.White)) {
         Column(modifier = Modifier.padding(16.dp)) {
-            Text("👤 ${trip.customerId}", fontWeight = FontWeight.Bold)
+            Text("👤 ${trip.customerId}")
             Text("📍 ${trip.pickupLocation.address}")
-            Text("💰 ${trip.price} ETB", color = Color(0xFF2E7D32), fontWeight = FontWeight.Bold)
+            Text("💰 ${trip.price} ETB")
             Button(onClick = { 
                 FirebaseDatabase.getInstance().getReference("trips").child(trip.tripId)
                    .updateChildren(mapOf("status" to "ACCEPTED", "driverId" to driverId))
-                Toast.makeText(context, "Accepted!", Toast.LENGTH_SHORT).show()
             }, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2E7D32)), modifier = Modifier.fillMaxWidth()) { Text("ACCEPT RIDE") }
         }
     }

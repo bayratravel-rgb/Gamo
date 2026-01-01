@@ -10,8 +10,9 @@ data class Trip(
     val price: Double = 0.0,
     val estimatedTime: Int = 0,
     val pickupNotes: String = "",
+    val vehicleType: VehicleType = VehicleType.BAJAJ,
     // --- NEW FIELD ---
-    val vehicleType: VehicleType = VehicleType.BAJAJ
+    val paymentStatus: String = "PENDING" // PENDING, PAID_CASH, PAID_WALLET
 )
 
 data class Location(
@@ -25,8 +26,5 @@ enum class TripStatus {
 }
 
 enum class VehicleType {
-    BAJAJ,      // Cheapest
-    COMFORT,    // Toyota Vitz/Corolla
-    LUXURY,     // Land Cruiser/Prado
-    POOL        // Shared Ride
+    BAJAJ, COMFORT, LUXURY, POOL
 }
