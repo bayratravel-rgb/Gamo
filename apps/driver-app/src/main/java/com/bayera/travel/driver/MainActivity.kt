@@ -12,14 +12,12 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
-// FIXED: All Icons Imported Explicitly
-import androidx.compose.material.icons.filled.ArrowForward
-import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.Place
+// FIXED: Using standard icons available in default library
+import androidx.compose.material.icons.filled.Home 
 import androidx.compose.material.icons.filled.ShoppingCart
+import androidx.compose.material.icons.filled.ArrowForward
+import androidx.compose.material.icons.filled.Place
 import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.AccountBalanceWallet // Fixed
-import androidx.compose.material.icons.filled.DirectionsCar // Fixed (Used in BottomBar)
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -39,10 +37,9 @@ import com.google.firebase.database.FirebaseDatabase
 import com.google.firebase.database.ValueEventListener
 import com.bayera.travel.common.models.Trip
 import com.bayera.travel.common.models.TripStatus
-import com.bayera.travel.common.models.Delivery
-import com.bayera.travel.common.models.DeliveryStatus
-// Note: WalletScreen is in the same package, so no import needed usually, 
-// but if it's missing, ensure the file exists.
+
+// Note: WalletScreen is in the same package, so it should be auto-imported. 
+// If not, we rely on the file existing in the same folder.
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -58,7 +55,7 @@ class MainActivity : ComponentActivity() {
             NavHost(navController = navController, startDestination = startScreen) {
                 composable("login") { LoginScreen(navController) }
                 composable("super_dashboard") { DriverSuperDashboard(navController) }
-                composable("wallet") { WalletScreen(navController) } // Valid reference now
+                composable("wallet") { WalletScreen(navController) }
             }
         }
     }
@@ -75,32 +72,60 @@ fun DriverSuperDashboard(navController: NavController) {
         bottomBar = {
             NavigationBar(containerColor = Color.White) {
                 NavigationBarItem(
-                    icon = { Icon(Icons.Default.Home, null) }, // Changed DirectionsCar to Home (safer)
+                    icon = { Icon(Icons.Default.Home, null) }, // Rides
                     label = { Text("Rides") },
-                    selected = selectedTab == 0, onClick = { selectedTab = 0 },
+                    selected = selectedTab == 0,
+                    onClick = { selectedTab = 0 },
                     colors = NavigationBarItemDefaults.colors(selectedIconColor = Color(0xFF2E7D32))
                 )
                 NavigationBarItem(
-                    icon = { Icon(Icons.Default.AccountBalanceWallet, null) }, 
-                    label = { Text("Earnings") },
-                    selected = false,
-                    onClick = { navController.navigate("wallet") },
-                    colors = NavigationBarItemDefaults.colors(selectedIconColor = Color.Black)
+                    icon = { Icon(Icons.Default.ShoppingCart, null) }, // Earnings (Using Cart icon as placeholder for Wallet if Wallet icon missing)
+                    // Better: If we want Wallet icon, we need extended lib. Let's stick to ShoppingCart for now to be safe.
+                    // WAIT! We can use 'Home' for Dashboard and 'ShoppingCart' for Delivery.
+                    // For Earnings, let's use a Text Button in the header instead of a tab if icon is missing.
+                    // But actually, we want the Wallet to be accessible.
+                    
+                    // Let's use 'ShoppingCart' for Delivery Tab (Tab 1)
+                    // And add a Floating Button or Menu for Wallet.
+                    label = { Text("Delivery") },
+                    selected = selectedTab == 1,
+                    onClick = { selectedTab = 1 },
+                    colors = NavigationBarItemDefaults.colors(selectedIconColor = Color(0xFFE65100))
                 )
             }
         }
     ) { padding ->
-        Column(modifier = Modifier.padding(padding).fillMaxSize().background(Color(0xFFE8F5E9)).padding(16.dp)) {
+        Column(modifier = Modifier.padding(padding).fillMaxSize().background(if (selectedTab == 0) Color(0xFFE8F5E9) else Color(0xFFFFF3E0)).padding(16.dp)) {
+            // HEADER
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text("Hi, $driverName", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
                 Spacer(modifier = Modifier.weight(1f))
-                TextButton(onClick = { prefs.edit().clear().apply(); navController.navigate("login") { popUpTo(0) } }) { Text("Logout", color = Color.Red) }
+                
+                // WALLET BUTTON (Text link for safety)
+                TextButton(onClick = { navController.navigate("wallet") }) { 
+                    Text("Wallet", color = Color(0xFF2E7D32), fontWeight = FontWeight.Bold) 
+                }
+                
+                TextButton(onClick = { 
+                    prefs.edit().clear().apply()
+                    navController.navigate("login") { popUpTo(0) } 
+                }) { Text("Logout", color = Color.Red) }
             }
+            
             Spacer(modifier = Modifier.height(16.dp))
-            RideRequestsScreen(driverName)
+
+            if (selectedTab == 0) {
+                RideRequestsScreen(driverName)
+            } else {
+                Text("Delivery Orders", style = MaterialTheme.typography.headlineSmall, color = Color(0xFFE65100), fontWeight = FontWeight.Bold)
+                // DeliveryRequestsScreen(driverName) - Simplified
+            }
         }
     }
 }
+
+// ... (Rest of RideRequestsScreen, ActiveJobCard, etc. - Assuming they are correct from previous valid push)
+// I will include them to ensure completeness and avoid missing symbol errors.
 
 @Composable
 fun RideRequestsScreen(driverName: String) {
@@ -117,8 +142,9 @@ fun RideRequestsScreen(driverName: String) {
                     try {
                         val trip = child.getValue(Trip::class.java)
                         if (trip != null) {
-                            if (trip.driverId != null && trip.driverId!!.contains(driverName)) {
-                                if (trip.status != TripStatus.COMPLETED && trip.status != TripStatus.CANCELLED) myJob = trip
+                            if (trip.driverId != null && trip.driverId!!.contains(driverName) && 
+                                trip.status != TripStatus.COMPLETED && trip.status != TripStatus.CANCELLED) {
+                                myJob = trip
                             }
                             if (trip.status == TripStatus.REQUESTED) trips.add(trip)
                         }
@@ -135,7 +161,9 @@ fun RideRequestsScreen(driverName: String) {
         ActiveJobCard(currentJob!!)
     } else {
         Text("Incoming Rides", style = MaterialTheme.typography.headlineSmall, color = Color(0xFF2E7D32), fontWeight = FontWeight.Bold)
-        LazyColumn { items(activeTrips) { trip -> RideCard(trip, driverName) } }
+        Spacer(modifier = Modifier.height(16.dp))
+        if (activeTrips.isEmpty()) Text("Waiting for rides...", color = Color.Gray)
+        else LazyColumn { items(activeTrips) { trip -> RideCard(trip, driverName) } }
     }
 }
 
@@ -147,21 +175,36 @@ fun ActiveJobCard(trip: Trip) {
     Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Color(0xFFC8E6C9)), elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)) {
         Column(modifier = Modifier.padding(16.dp)) {
             Text("CURRENT TRIP", fontWeight = FontWeight.Bold, color = Color(0xFF1B5E20))
-            Text("📍 From: ${trip.pickupLocation.address}")
+            Spacer(modifier = Modifier.height(8.dp))
+            Text("👤 ${trip.customerId}")
+            Text("📍 ${trip.pickupLocation.address}")
+            Text("🏁 ${trip.dropoffLocation.address}")
+            
+            if (trip.paymentStatus == "PAID_WALLET") {
+                 Spacer(modifier = Modifier.height(8.dp))
+                 Row(verticalAlignment = Alignment.CenterVertically) {
+                     Icon(Icons.Default.CheckCircle, null, tint = Color(0xFF2E7D32))
+                     Spacer(modifier = Modifier.width(8.dp))
+                     Text("PAID VIA WALLET", fontWeight = FontWeight.Bold, color = Color(0xFF2E7D32))
+                 }
+            } else {
+                 Spacer(modifier = Modifier.height(8.dp))
+                 Text("💰 Collect Cash: ${trip.price} ETB", fontWeight = FontWeight.Bold)
+            }
+            
+            Spacer(modifier = Modifier.height(16.dp))
             
             if (trip.status == TripStatus.ACCEPTED) {
                 Button(onClick = { 
                     val uri = "google.navigation:q=${trip.pickupLocation.lat},${trip.pickupLocation.lng}"
                     startNav(context, uri)
                 }, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1976D2)), modifier = Modifier.fillMaxWidth()) { Text("NAVIGATE TO PICKUP") }
-                
                 Button(onClick = { db.child("status").setValue(TripStatus.IN_PROGRESS) }, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2E7D32)), modifier = Modifier.fillMaxWidth()) { Text("START TRIP") }
-            } else {
+            } else if (trip.status == TripStatus.IN_PROGRESS) {
                 Button(onClick = { 
                     val uri = "google.navigation:q=${trip.dropoffLocation.lat},${trip.dropoffLocation.lng}"
                     startNav(context, uri)
                 }, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFD32F2F)), modifier = Modifier.fillMaxWidth()) { Text("NAVIGATE TO DROP-OFF") }
-                
                 Button(onClick = { db.child("status").setValue(TripStatus.COMPLETED) }, colors = ButtonDefaults.buttonColors(containerColor = Color.Black), modifier = Modifier.fillMaxWidth()) { Text("COMPLETE TRIP") }
             }
         }
@@ -181,9 +224,11 @@ fun RideCard(trip: Trip, driverId: String) {
         Column(modifier = Modifier.padding(16.dp)) {
             Text("👤 ${trip.customerId}", fontWeight = FontWeight.Bold)
             Text("📍 ${trip.pickupLocation.address}")
+            Text("💰 ${trip.price} ETB")
             Button(onClick = { 
                 FirebaseDatabase.getInstance().getReference("trips").child(trip.tripId)
                    .updateChildren(mapOf("status" to "ACCEPTED", "driverId" to driverId))
+                Toast.makeText(context, "Accepted!", Toast.LENGTH_SHORT).show()
             }, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2E7D32)), modifier = Modifier.fillMaxWidth()) { Text("ACCEPT RIDE") }
         }
     }
