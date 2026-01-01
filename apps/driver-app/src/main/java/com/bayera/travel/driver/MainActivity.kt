@@ -12,14 +12,12 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
-// FIXED IMPORTS
 import androidx.compose.material.icons.filled.ArrowForward
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Place
 import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.AccountBalanceWallet // This was missing!
-// -------------
+import androidx.compose.material.icons.filled.Star // Use Star
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -76,7 +74,7 @@ fun DriverSuperDashboard(navController: NavController) {
                     colors = NavigationBarItemDefaults.colors(selectedIconColor = Color(0xFF2E7D32))
                 )
                 NavigationBarItem(
-                    icon = { Icon(Icons.Default.AccountBalanceWallet, null) }, label = { Text("Earnings") },
+                    icon = { Icon(Icons.Default.Star, null) }, label = { Text("Earnings") },
                     selected = false, 
                     onClick = { navController.navigate("wallet") },
                     colors = NavigationBarItemDefaults.colors(selectedIconColor = Color.Black)
@@ -96,10 +94,7 @@ fun DriverSuperDashboard(navController: NavController) {
     }
 }
 
-// ... (Assuming RideRequestsScreen logic is still intact in your file or you want me to include it?)
-// To prevent "Unresolved Reference" for RideRequestsScreen if the file was wiped, 
-// I will include the abbreviated logic here to ensure compilation.
-
+// Reuse existing RideRequestsScreen logic from previous files...
 @Composable
 fun RideRequestsScreen(driverName: String) {
     var activeTrips by remember { mutableStateOf<List<Trip>>(emptyList()) }
@@ -128,19 +123,36 @@ fun RideRequestsScreen(driverName: String) {
     }
 
     if (currentJob != null) {
-        // Simple Job Card
-        Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Color(0xFFC8E6C9))) {
-            Column(modifier = Modifier.padding(16.dp)) {
-                Text("CURRENT JOB", fontWeight = FontWeight.Bold)
-                Text("To: ${currentJob!!.dropoffLocation.address}")
-            }
-        }
+        ActiveJobCard(currentJob!!)
     } else {
         Text("Incoming Rides", style = MaterialTheme.typography.headlineSmall, color = Color(0xFF2E7D32), fontWeight = FontWeight.Bold)
-        LazyColumn { items(activeTrips) { trip -> 
-            Card(modifier = Modifier.fillMaxWidth().padding(8.dp)) {
-                Text("Ride: ${trip.pickupLocation.address}", modifier = Modifier.padding(16.dp))
-            }
-        }}
+        LazyColumn { items(activeTrips) { trip -> RideCard(trip, driverName) } }
+    }
+}
+
+@Composable
+fun ActiveJobCard(trip: Trip) {
+    val context = LocalContext.current
+    val db = FirebaseDatabase.getInstance().getReference("trips").child(trip.tripId)
+    Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Color(0xFFC8E6C9))) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text("CURRENT TRIP", fontWeight = FontWeight.Bold)
+            if (trip.paymentStatus == "PAID_WALLET") Text("PAID VIA WALLET", color = Color(0xFF2E7D32), fontWeight = FontWeight.Bold)
+            Button(onClick = { db.child("status").setValue(TripStatus.COMPLETED) }, colors = ButtonDefaults.buttonColors(containerColor = Color.Black), modifier = Modifier.fillMaxWidth()) { Text("COMPLETE TRIP") }
+        }
+    }
+}
+
+@Composable
+fun RideCard(trip: Trip, driverId: String) {
+    val context = LocalContext.current
+    Card(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp), colors = CardDefaults.cardColors(containerColor = Color.White)) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text("📍 ${trip.pickupLocation.address}")
+            Button(onClick = { 
+                FirebaseDatabase.getInstance().getReference("trips").child(trip.tripId)
+                   .updateChildren(mapOf("status" to "ACCEPTED", "driverId" to driverId))
+            }, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2E7D32)), modifier = Modifier.fillMaxWidth()) { Text("ACCEPT RIDE") }
+        }
     }
 }
