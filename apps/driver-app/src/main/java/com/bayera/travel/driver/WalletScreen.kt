@@ -4,26 +4,23 @@ import android.content.Context
 import android.widget.Toast
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AccountBalanceWallet
 import androidx.compose.material.icons.filled.ArrowBack
+// FIXED: Added missing import
+import androidx.compose.material.icons.filled.AccountBalanceWallet 
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext // FIXED: Added Import
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
-import com.google.firebase.database.FirebaseDatabase
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun WalletScreen(navController: NavController) {
     val context = LocalContext.current
     val prefs = context.getSharedPreferences("driver_prefs", Context.MODE_PRIVATE)
-    
-    // In real app, fetch from Firebase. For MVP, use local cache or 0.
     var balance by remember { mutableStateOf(500.0) }
 
     Scaffold(
@@ -35,7 +32,6 @@ fun WalletScreen(navController: NavController) {
         }
     ) { padding ->
         Column(modifier = Modifier.padding(padding).padding(16.dp)) {
-            
             Card(
                 modifier = Modifier.fillMaxWidth().height(150.dp),
                 colors = CardDefaults.cardColors(containerColor = Color(0xFF2E7D32)), 
@@ -51,18 +47,12 @@ fun WalletScreen(navController: NavController) {
                     Text("$balance ETB", style = MaterialTheme.typography.headlineLarge, color = Color.White, fontWeight = FontWeight.Bold)
                 }
             }
-
             Spacer(modifier = Modifier.height(32.dp))
-            
             Button(
-                onClick = { 
-                    Toast.makeText(context, "Withdrawal Request Sent to Admin!", Toast.LENGTH_LONG).show()
-                },
+                onClick = { Toast.makeText(context, "Request Sent!", Toast.LENGTH_LONG).show() },
                 modifier = Modifier.fillMaxWidth().height(50.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = Color.Black)
-            ) {
-                Text("Request Withdrawal")
-            }
+            ) { Text("Request Withdrawal") }
         }
     }
 }
