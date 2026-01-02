@@ -235,6 +235,8 @@ fun RideScreen(navController: NavController) {
                 if (activeTrip?.status == TripStatus.ACCEPTED) {
                     Text("✅ Driver Found!", style = MaterialTheme.typography.headlineSmall, color = Color(0xFF2E7D32), fontWeight = FontWeight.Bold)
                     Text("Driver: ${activeTrip?.driverId}", style = MaterialTheme.typography.bodyLarge)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Button(onClick = { navController.navigate("pay_trip/${activeTrip!!.tripId}/${activeTrip!!.price}") }, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2E7D32))) { Text("Pay Now") }
                     Text("Vehicle: ${activeTrip?.vehicleType}", style = MaterialTheme.typography.bodyMedium, color = Color.Gray)
                 } else {
                     Row(verticalAlignment = Alignment.CenterVertically) {
