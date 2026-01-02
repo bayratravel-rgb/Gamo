@@ -6,12 +6,10 @@ import android.net.Uri
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
-import androidx.activity.compose.BackHandler // FIXED: Import Added
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -30,8 +28,6 @@ import androidx.navigation.compose.rememberNavController
 import com.bayera.travel.common.payment.ChapaManager
 import com.google.firebase.FirebaseApp
 import com.google.firebase.database.FirebaseDatabase
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
 import org.osmdroid.config.Configuration
 import java.util.UUID
 
@@ -39,29 +35,38 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         try { FirebaseApp.initializeApp(this) } catch (e: Exception) {}
+        val osmPrefs = getSharedPreferences("osmdroid", Context.MODE_PRIVATE)
+        Configuration.getInstance().load(this, osmPrefs)
         Configuration.getInstance().userAgentValue = packageName
 
         setContent {
             val navController = rememberNavController()
             val context = LocalContext.current
             val prefs = context.getSharedPreferences("user_prefs", Context.MODE_PRIVATE)
-            val startScreen = if (prefs.getString("name", "").isNullOrEmpty()) "login" else "super_home"
+            
+            val isSystemDark = androidx.compose.foundation.isSystemInDarkTheme()
+            val isDarkTheme = prefs.getBoolean("dark_mode", isSystemDark)
+            val colors = if (isDarkTheme) darkColorScheme() else lightColorScheme()
 
-            NavHost(navController = navController, startDestination = startScreen) {
-                composable("login") { LoginScreen(navController) }
-                composable("super_home") { SuperAppHome(navController) }
-                composable("ride_home") { RideScreen(navController) }
-                composable("delivery_home") { ShoppingScreen(navController) }
-                composable("hotel_home") { HotelScreen(navController) }
-                composable("profile") { ProfileScreen(navController) }
-                composable("settings") { SettingsScreen(navController) }
-                composable("history") { HistoryScreen(navController) }
-                composable("wallet") { WalletScreen(navController) }
-                
-                composable("pay_trip/{tripId}/{amount}") { backStackEntry ->
-                    val tripId = backStackEntry.arguments?.getString("tripId") ?: ""
-                    val amount = backStackEntry.arguments?.getString("amount")?.toDoubleOrNull() ?: 0.0
-                    PayTripScreen(navController, tripId, amount)
+            MaterialTheme(colorScheme = colors) {
+                val startScreen = if (prefs.getString("name", "").isNullOrEmpty()) "login" else "super_home"
+
+                NavHost(navController = navController, startDestination = startScreen) {
+                    composable("login") { LoginScreen(navController) }
+                    composable("super_home") { SuperAppHome(navController) }
+                    composable("ride_home") { RideScreen(navController) }
+                    composable("delivery_home") { ShoppingScreen(navController) }
+                    composable("hotel_home") { HotelScreen(navController) }
+                    composable("profile") { ProfileScreen(navController) }
+                    composable("settings") { SettingsScreen(navController) }
+                    composable("history") { HistoryScreen(navController) }
+                    composable("wallet") { WalletScreen(navController) }
+                    
+                    composable("pay_trip/{tripId}/{amount}") { backStackEntry ->
+                        val tripId = backStackEntry.arguments?.getString("tripId") ?: ""
+                        val amount = backStackEntry.arguments?.getString("amount")?.toDoubleOrNull() ?: 0.0
+                        PayTripScreen(navController, tripId, amount)
+                    }
                 }
             }
         }
@@ -71,13 +76,12 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun PayTripScreen(navController: NavController, tripId: String, amount: Double) {
     val context = LocalContext.current
+    val prefs = context.getSharedPreferences("user_prefs", Context.MODE_PRIVATE)
+    val userName = prefs.getString("name", "User") ?: "User"
+    
     var isLoading by remember { mutableStateOf(false) }
 
-    Column(
-        modifier = Modifier.fillMaxSize().padding(16.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
-    ) {
+    Column(modifier = Modifier.fillMaxSize().padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
         Icon(Icons.Default.Payment, null, modifier = Modifier.size(64.dp), tint = Color(0xFF2E7D32))
         Spacer(modifier = Modifier.height(16.dp))
         Text("Pay for Ride", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
@@ -89,21 +93,24 @@ fun PayTripScreen(navController: NavController, tripId: String, amount: Double) 
                 isLoading = true
                 val txRef = "TRIP-${UUID.randomUUID().toString().take(8)}"
                 
-                ChapaManager.initializePayment("customer@bayera.com", amount, "User", "Bayera", txRef) { url, error ->
+                // --- FIX: Use Valid Gmail for Chapa Validation ---
+                // In production, ask user for email. For now, use the hardcoded valid one.
+                val email = "Yeabkalkassahun21@gmail.com" 
+                
+                ChapaManager.initializePayment(email, amount, userName, "Customer", txRef) { url, error ->
                     android.os.Handler(android.os.Looper.getMainLooper()).post {
                         isLoading = false
                         if (url != null) {
                             val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
                             context.startActivity(intent)
                             
-                            // MARK PAID
                             FirebaseDatabase.getInstance().getReference("trips").child(tripId)
                                 .child("paymentStatus").setValue("PAID_WALLET")
                             
                             Toast.makeText(context, "Payment Processing...", Toast.LENGTH_SHORT).show()
                             navController.popBackStack()
                         } else {
-                            Toast.makeText(context, "Failed: $error", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(context, "Failed: $error", Toast.LENGTH_LONG).show()
                         }
                     }
                 }
@@ -119,14 +126,12 @@ fun PayTripScreen(navController: NavController, tripId: String, amount: Double) 
     }
 }
 
+// ... (SuperAppHome and ServiceCard - Standard)
 @Composable
 fun SuperAppHome(navController: NavController) {
     val context = LocalContext.current
     val prefs = context.getSharedPreferences("user_prefs", Context.MODE_PRIVATE)
     val userName = prefs.getString("name", "User") ?: "User"
-
-    // Lock Back Button
-    BackHandler(enabled = true) { /* Do Nothing */ }
 
     Scaffold(
         bottomBar = {
