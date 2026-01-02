@@ -32,7 +32,6 @@ import com.google.firebase.database.FirebaseDatabase
 import com.google.firebase.database.ValueEventListener
 import com.bayera.travel.common.models.Trip
 import com.bayera.travel.common.models.TripStatus
-import kotlin.math.roundToInt
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -53,9 +52,6 @@ class MainActivity : ComponentActivity() {
         }
     }
 }
-
-// ... (Dashboard code omitted for brevity, assuming it exists) ...
-// We focus on the ActiveJobCard logic below
 
 @Composable
 fun DriverSuperDashboard(navController: NavController) {
@@ -88,6 +84,7 @@ fun DriverSuperDashboard(navController: NavController) {
 fun RideRequestsScreen(driverName: String) {
     var activeTrips by remember { mutableStateOf<List<Trip>>(emptyList()) }
     var currentJob by remember { mutableStateOf<Trip?>(null) }
+    
     LaunchedEffect(Unit) {
         val db = FirebaseDatabase.getInstance().getReference("trips")
         db.addValueEventListener(object : ValueEventListener {
@@ -109,10 +106,8 @@ fun RideRequestsScreen(driverName: String) {
             override fun onCancelled(e: DatabaseError) {}
         })
     }
-    if (currentJob != null) ActiveJobCard(currentJob!!) else {
-        Text("Incoming Rides", style = MaterialTheme.typography.headlineSmall, color = Color(0xFF2E7D32), fontWeight = FontWeight.Bold)
-        LazyColumn { items(activeTrips) { trip -> RideCard(trip, driverName) } }
-    }
+
+    if (currentJob != null) ActiveJobCard(currentJob!!) else LazyColumn { items(activeTrips) { trip -> RideCard(trip, driverName) } }
 }
 
 @Composable
@@ -122,62 +117,34 @@ fun ActiveJobCard(trip: Trip) {
     val prefs = context.getSharedPreferences("driver_prefs", Context.MODE_PRIVATE)
     val driverId = prefs.getString("phone", "unknown")?.filter { it.isDigit() } ?: "000"
 
-    // --- COMMISSION CALCULATION ---
-    val commissionRate = 0.15 // 15%
-    val driverEarnings = (trip.price * (1.0 - commissionRate)).roundToInt().toDouble()
-    val platformFee = (trip.price * commissionRate).roundToInt().toDouble()
-
     Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Color(0xFFC8E6C9)), elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)) {
         Column(modifier = Modifier.padding(16.dp)) {
             Text("CURRENT TRIP", fontWeight = FontWeight.Bold, color = Color(0xFF1B5E20))
             Text("📍 ${trip.pickupLocation.address}")
             Text("🏁 ${trip.dropoffLocation.address}")
-            
-            if (trip.paymentStatus == "PAID_WALLET") {
-                 Text("PAID VIA WALLET: ${trip.price} ETB", fontWeight = FontWeight.Bold, color = Color(0xFF2E7D32))
-                 Text("Your Share (85%): $driverEarnings ETB", style = MaterialTheme.typography.bodyMedium, color = Color.DarkGray)
-            } else {
-                 Text("💰 Collect Cash: ${trip.price} ETB", fontWeight = FontWeight.Bold)
-                 Text("You owe Bayera (15%): $platformFee ETB", style = MaterialTheme.typography.bodySmall, color = Color.Red)
-            }
-            
+            Text(if (trip.paymentStatus == "PAID_WALLET") "PAID VIA WALLET" else "💰 Collect: ${trip.price} ETB", fontWeight = FontWeight.Bold)
             Spacer(modifier = Modifier.height(16.dp))
             
             if (trip.status == TripStatus.ACCEPTED) {
-                Button(onClick = { 
-                    val uri = "google.navigation:q=${trip.pickupLocation.lat},${trip.pickupLocation.lng}"
-                    startNav(context, uri)
-                }, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1976D2)), modifier = Modifier.fillMaxWidth()) { Text("NAVIGATE TO PICKUP") }
+                Button(onClick = { val uri = "google.navigation:q=${trip.pickupLocation.lat},${trip.pickupLocation.lng}"; startNav(context, uri) }, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1976D2)), modifier = Modifier.fillMaxWidth()) { Text("NAVIGATE TO PICKUP") }
                 Button(onClick = { db.child("status").setValue(TripStatus.IN_PROGRESS) }, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2E7D32)), modifier = Modifier.fillMaxWidth()) { Text("START TRIP") }
             } else if (trip.status == TripStatus.IN_PROGRESS) {
-                Button(onClick = { 
-                    val uri = "google.navigation:q=${trip.dropoffLocation.lat},${trip.dropoffLocation.lng}"
-                    startNav(context, uri)
-                }, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFD32F2F)), modifier = Modifier.fillMaxWidth()) { Text("NAVIGATE TO DROP-OFF") }
+                Button(onClick = { val uri = "google.navigation:q=${trip.dropoffLocation.lat},${trip.dropoffLocation.lng}"; startNav(context, uri) }, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFD32F2F)), modifier = Modifier.fillMaxWidth()) { Text("NAVIGATE TO DROP-OFF") }
                 
+                // --- UPDATE WALLET ON COMPLETION (CASH OR WALLET) ---
                 Button(
                     onClick = { 
-                        // --- PAYOUT LOGIC ---
                         val driverWalletRef = FirebaseDatabase.getInstance().getReference("drivers").child(driverId).child("balance")
-                        
-                        if (trip.paymentStatus == "PAID_WALLET") {
-                            // Driver gets 85% added to wallet
-                             driverWalletRef.runTransaction(object : com.google.firebase.database.Transaction.Handler {
-                                override fun doTransaction(currentData: com.google.firebase.database.MutableData): com.google.firebase.database.Transaction.Result {
-                                    val currentBalance = currentData.getValue(Double::class.java) ?: 0.0
-                                    currentData.value = currentBalance + driverEarnings
-                                    return com.google.firebase.database.Transaction.success(currentData)
-                                }
-                                override fun onComplete(e: DatabaseError?, b: Boolean, s: DataSnapshot?) {}
-                            })
-                            Toast.makeText(context, "+$driverEarnings ETB added (15% fee deducted)", Toast.LENGTH_LONG).show()
-                        } else {
-                            // Cash Trip: Driver owes 15%. Deduct from wallet?
-                            // For now, we just log it. (Advanced: Negative balance system)
-                            Toast.makeText(context, "Cash Trip Complete. Don't forget Bayera's fee!", Toast.LENGTH_LONG).show()
-                        }
-                        
+                        driverWalletRef.runTransaction(object : com.google.firebase.database.Transaction.Handler {
+                            override fun doTransaction(currentData: com.google.firebase.database.MutableData): com.google.firebase.database.Transaction.Result {
+                                val currentBalance = currentData.getValue(Double::class.java) ?: 0.0
+                                currentData.value = currentBalance + trip.price
+                                return com.google.firebase.database.Transaction.success(currentData)
+                            }
+                            override fun onComplete(e: DatabaseError?, b: Boolean, s: DataSnapshot?) {}
+                        })
                         db.child("status").setValue(TripStatus.COMPLETED)
+                        Toast.makeText(context, "Trip Completed! Earnings Added.", Toast.LENGTH_LONG).show()
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = Color.Black),
                     modifier = Modifier.fillMaxWidth()
@@ -195,16 +162,12 @@ fun startNav(context: Context, uri: String) {
 
 @Composable
 fun RideCard(trip: Trip, driverId: String) {
-    val context = LocalContext.current
-    Card(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp), colors = CardDefaults.cardColors(containerColor = Color.White)) {
+    Card(modifier = Modifier.fillMaxWidth().padding(8.dp)) {
         Column(modifier = Modifier.padding(16.dp)) {
-            Text("👤 ${trip.customerId}", fontWeight = FontWeight.Bold)
             Text("📍 ${trip.pickupLocation.address}")
-            Text("💰 ${trip.price} ETB", color = Color(0xFF2E7D32), fontWeight = FontWeight.Bold)
             Button(onClick = { 
                 FirebaseDatabase.getInstance().getReference("trips").child(trip.tripId)
                    .updateChildren(mapOf("status" to "ACCEPTED", "driverId" to driverId))
-                Toast.makeText(context, "Accepted!", Toast.LENGTH_SHORT).show()
             }, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2E7D32)), modifier = Modifier.fillMaxWidth()) { Text("ACCEPT RIDE") }
         }
     }
