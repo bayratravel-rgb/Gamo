@@ -1,7 +1,6 @@
 package com.bayera.travel.customer
 
 import android.Manifest
-import androidx.activity.compose.BackHandler
 import android.content.pm.PackageManager
 import android.location.Geocoder
 import android.widget.Toast
@@ -133,7 +132,13 @@ fun RideScreen(navController: NavController) {
             db.addValueEventListener(object : ValueEventListener {
                 override fun onDataChange(snapshot: DataSnapshot) {
                     val updatedTrip = snapshot.getValue(Trip::class.java)
-                    if (updatedTrip != null) activeTrip = updatedTrip
+                    if (updatedTrip != null) {
+                        activeTrip = updatedTrip
+                        // --- FIX: STAY ON WAITING SCREEN IF TRIP IS ACTIVE ---
+                        if (updatedTrip.status != TripStatus.COMPLETED && updatedTrip.status != TripStatus.CANCELLED) {
+                            step = 3
+                        }
+                    }
                 }
                 override fun onCancelled(e: DatabaseError) {}
             })
@@ -233,15 +238,23 @@ fun RideScreen(navController: NavController) {
 
         Column(modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth().background(Color.White, shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)).padding(24.dp)) {
             if (step == 3) {
-                BackHandler(enabled = true) { /* Prevent Back Button */ }
                 if (activeTrip?.status == TripStatus.ACCEPTED) {
                     Text("✅ Driver Found!", style = MaterialTheme.typography.headlineSmall, color = Color(0xFF2E7D32), fontWeight = FontWeight.Bold)
                     Text("Driver: ${activeTrip?.driverId}", style = MaterialTheme.typography.bodyLarge)
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Button(onClick = { navController.navigate("pay_trip/${activeTrip!!.tripId}/${activeTrip!!.price}") }, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2E7D32)), modifier = Modifier.fillMaxWidth()) { Text("PAY NOW") }
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Button(onClick = { navController.navigate("pay_trip/${activeTrip!!.tripId}/${activeTrip!!.price}") }, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2E7D32))) { Text("Pay Now") }
-                    Text("Vehicle: ${activeTrip?.vehicleType}", style = MaterialTheme.typography.bodyMedium, color = Color.Gray)
+                    
+                    Spacer(modifier = Modifier.height(16.dp))
+                    
+                    // --- FIX: RETRY PAYMENT BUTTON ---
+                    if (activeTrip?.paymentStatus != "PAID_WALLET") {
+                        Button(
+                            onClick = { navController.navigate("pay_trip/${activeTrip!!.tripId}/${activeTrip!!.price}") }, 
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1E88E5)), // Blue Pay Button
+                            modifier = Modifier.fillMaxWidth()
+                        ) { Text("PAY NOW (${activeTrip!!.price} ETB)") }
+                    } else {
+                        Text("✅ PAID", color = Color(0xFF2E7D32), fontWeight = FontWeight.Bold)
+                    }
+
                 } else {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         CircularProgressIndicator(color = Color(0xFF1E88E5), modifier = Modifier.size(24.dp))
@@ -252,14 +265,14 @@ fun RideScreen(navController: NavController) {
                     Button(onClick = { step = 0; activeTrip = null; pickupGeo = null; dropoffGeo = null; routePoints = emptyList() }, colors = ButtonDefaults.buttonColors(containerColor = Color.LightGray), modifier = Modifier.fillMaxWidth()) { Text("Cancel Request", color = Color.Black) }
                 }
             } else if (step == 0) {
+                // ... (Same Pickup Logic)
                 Text("Start Trip From?", style = MaterialTheme.typography.titleMedium, color = Color.Gray)
                 Text(addressText, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, maxLines = 1)
                 Spacer(modifier = Modifier.height(16.dp))
-                Button(onClick = { 
-                    val center = mapViewRef?.mapCenter as? GeoPoint
-                    if (center != null) { pickupGeo = center; pickupAddr = addressText; step = 1 } 
-                }, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2E7D32)), modifier = Modifier.fillMaxWidth().height(50.dp)) { Text("Set Pickup Here") }
+                Button(onClick = { val center = mapViewRef?.mapCenter as? GeoPoint; if (center != null) { pickupGeo = center; pickupAddr = addressText; step = 1 } }, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2E7D32)), modifier = Modifier.fillMaxWidth().height(50.dp)) { Text("Set Pickup Here") }
+
             } else if (step == 1) {
+                // ... (Same Dropoff Logic)
                 Text("Where to?", style = MaterialTheme.typography.titleMedium, color = Color.Gray)
                 Text(addressText, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, maxLines = 1)
                 Spacer(modifier = Modifier.height(16.dp))
@@ -272,7 +285,9 @@ fun RideScreen(navController: NavController) {
                         step = 2 
                     }
                 }, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFD32F2F)), modifier = Modifier.fillMaxWidth().height(50.dp)) { Text("Set Destination Here") }
+
             } else if (step == 2) {
+                // ... (Same Review Logic)
                 Text("Trip Summary", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
                 
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(vertical = 16.dp)) {
