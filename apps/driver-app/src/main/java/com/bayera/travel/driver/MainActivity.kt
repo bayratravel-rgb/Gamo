@@ -120,9 +120,10 @@ fun ActiveJobCard(trip: Trip) {
     Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Color(0xFFC8E6C9)), elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)) {
         Column(modifier = Modifier.padding(16.dp)) {
             Text("CURRENT TRIP", fontWeight = FontWeight.Bold, color = Color(0xFF1B5E20))
-            Text("📍 ${trip.pickupLocation.address}")
-            Text("🏁 ${trip.dropoffLocation.address}")
-            Text(if (trip.paymentStatus == "PAID_WALLET") "PAID VIA WALLET" else "💰 Collect: ${trip.price} ETB", fontWeight = FontWeight.Bold)
+            Spacer(modifier = Modifier.height(8.dp))
+            Text("📍 From: ${trip.pickupLocation.address}")
+            Text("🏁 To: ${trip.dropoffLocation.address}")
+            Text(if (trip.paymentStatus == "PAID_WALLET") "PAID VIA WALLET" else "💰 Collect Cash: ${trip.price} ETB", fontWeight = FontWeight.Bold)
             Spacer(modifier = Modifier.height(16.dp))
             
             if (trip.status == TripStatus.ACCEPTED) {
@@ -131,20 +132,31 @@ fun ActiveJobCard(trip: Trip) {
             } else if (trip.status == TripStatus.IN_PROGRESS) {
                 Button(onClick = { val uri = "google.navigation:q=${trip.dropoffLocation.lat},${trip.dropoffLocation.lng}"; startNav(context, uri) }, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFD32F2F)), modifier = Modifier.fillMaxWidth()) { Text("NAVIGATE TO DROP-OFF") }
                 
-                // --- UPDATE WALLET ON COMPLETION (CASH OR WALLET) ---
                 Button(
                     onClick = { 
+                        // --- COMMISSION LOGIC (10%) ---
                         val driverWalletRef = FirebaseDatabase.getInstance().getReference("drivers").child(driverId).child("balance")
+                        
                         driverWalletRef.runTransaction(object : com.google.firebase.database.Transaction.Handler {
                             override fun doTransaction(currentData: com.google.firebase.database.MutableData): com.google.firebase.database.Transaction.Result {
                                 val currentBalance = currentData.getValue(Double::class.java) ?: 0.0
-                                currentData.value = currentBalance + trip.price
+                                
+                                if (trip.paymentStatus == "PAID_WALLET") {
+                                    // Wallet Payment: Add 90% to Driver Balance
+                                    // (You keep 100%, so you owe driver 90%)
+                                    currentData.value = currentBalance + (trip.price * 0.90)
+                                } else {
+                                    // Cash Payment: Deduct 10% from Driver Balance
+                                    // (Driver keeps 100% Cash, so they owe you 10%)
+                                    currentData.value = currentBalance - (trip.price * 0.10)
+                                }
                                 return com.google.firebase.database.Transaction.success(currentData)
                             }
                             override fun onComplete(e: DatabaseError?, b: Boolean, s: DataSnapshot?) {}
                         })
+                        
                         db.child("status").setValue(TripStatus.COMPLETED)
-                        Toast.makeText(context, "Trip Completed! Earnings Added.", Toast.LENGTH_LONG).show()
+                        Toast.makeText(context, "Trip Completed! Balance Updated.", Toast.LENGTH_LONG).show()
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = Color.Black),
                     modifier = Modifier.fillMaxWidth()
@@ -162,9 +174,11 @@ fun startNav(context: Context, uri: String) {
 
 @Composable
 fun RideCard(trip: Trip, driverId: String) {
+    val context = LocalContext.current
     Card(modifier = Modifier.fillMaxWidth().padding(8.dp)) {
         Column(modifier = Modifier.padding(16.dp)) {
             Text("📍 ${trip.pickupLocation.address}")
+            Text("💰 ${trip.price} ETB")
             Button(onClick = { 
                 FirebaseDatabase.getInstance().getReference("trips").child(trip.tripId)
                    .updateChildren(mapOf("status" to "ACCEPTED", "driverId" to driverId))
