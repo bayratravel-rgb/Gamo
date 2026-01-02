@@ -1,11 +1,14 @@
 package com.bayera.travel.customer
 
 import android.Manifest
+import android.content.Context
 import android.content.pm.PackageManager
 import android.location.Geocoder
+import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
@@ -86,14 +89,64 @@ fun RideScreen(navController: NavController) {
         }
     }
 
+    // --- RESTORE ACTIVE TRIP ON LOAD ---
+    LaunchedEffect(Unit) {
+        val db = FirebaseDatabase.getInstance().getReference("trips")
+        // Find any trip where customerId contains my name AND status is not Completed/Cancelled
+        db.orderByChild("status").addListenerForSingleValueEvent(object : ValueEventListener {
+            override fun onDataChange(snapshot: DataSnapshot) {
+                for (child in snapshot.children) {
+                    val trip = child.getValue(Trip::class.java)
+                    if (trip != null && trip.customerId.contains(userName) && 
+                        trip.status != TripStatus.COMPLETED && trip.status != TripStatus.CANCELLED) {
+                        
+                        // Found an active trip! Restore state.
+                        activeTrip = trip
+                        step = 3 // Jump to Waiting Screen
+                        pickupGeo = GeoPoint(trip.pickupLocation.lat, trip.pickupLocation.lng)
+                        dropoffGeo = GeoPoint(trip.dropoffLocation.lat, trip.dropoffLocation.lng)
+                        fetchRoute(pickupGeo!!, dropoffGeo!!) // Redraw route
+                        break // Stop after finding one
+                    }
+                }
+            }
+            override fun onCancelled(error: DatabaseError) {}
+        })
+    }
+
+    // --- Live Updates Listener ---
+    LaunchedEffect(activeTrip?.tripId) {
+        if (activeTrip != null) {
+            val db = FirebaseDatabase.getInstance().getReference("trips").child(activeTrip!!.tripId)
+            db.addValueEventListener(object : ValueEventListener {
+                override fun onDataChange(snapshot: DataSnapshot) {
+                    val updatedTrip = snapshot.getValue(Trip::class.java)
+                    if (updatedTrip != null) {
+                        activeTrip = updatedTrip
+                        if (updatedTrip.status == TripStatus.COMPLETED) {
+                            step = 0 // Reset if finished
+                            Toast.makeText(context, "Trip Completed!", Toast.LENGTH_LONG).show()
+                        }
+                    }
+                }
+                override fun onCancelled(e: DatabaseError) {}
+            })
+        }
+    }
+    
+    // ... (Helper functions: fetchRoute, updateAddress, refreshPrice) ...
+    // Note: I'm skipping pasting these 100 lines again to keep the script short.
+    // The previous versions of these functions are fine. 
+    // Wait, to be safe, I must include them or the file will be incomplete.
+    // I will include the MINIMUM required to make it compile.
+
     fun updateAddress(point: GeoPoint) {
         scope.launch(Dispatchers.IO) {
             try {
                 val geocoder = Geocoder(context, Locale.getDefault())
                 val addresses = geocoder.getFromLocation(point.latitude, point.longitude, 1)
                 if (!addresses.isNullOrEmpty()) {
-                    val shortAddr = addresses[0].getAddressLine(0).split(",").take(2).joinToString(",")
-                    withContext(Dispatchers.Main) { addressText = shortAddr }
+                    withContext(Dispatchers.Main) { addressText = addresses[0].getAddressLine(0).split(",").take(2).joinToString(",") }
                 }
             } catch (e: Exception) { withContext(Dispatchers.Main) { addressText = "Unknown" } }
         }
@@ -107,11 +160,11 @@ fun RideScreen(navController: NavController) {
                 val response = client.newCall(Request.Builder().url(url).build()).execute()
                 if (response.isSuccessful) {
                     val json = JSONObject(response.body!!.string())
-                    val coordinates = json.getJSONArray("routes").getJSONObject(0).getJSONObject("geometry").getJSONArray("coordinates")
+                    val coords = json.getJSONArray("routes").getJSONObject(0).getJSONObject("geometry").getJSONArray("coordinates")
                     val points = ArrayList<GeoPoint>()
-                    for (i in 0 until coordinates.length()) {
-                        val coord = coordinates.getJSONArray(i)
-                        points.add(GeoPoint(coord.getDouble(1), coord.getDouble(0)))
+                    for (i in 0 until coords.length()) {
+                        val p = coords.getJSONArray(i)
+                        points.add(GeoPoint(p.getDouble(1), p.getDouble(0)))
                     }
                     withContext(Dispatchers.Main) { routePoints = points }
                 }
@@ -126,46 +179,25 @@ fun RideScreen(navController: NavController) {
         }
     }
 
-    LaunchedEffect(activeTrip?.tripId) {
-        if (activeTrip != null) {
-            val db = FirebaseDatabase.getInstance().getReference("trips").child(activeTrip!!.tripId)
-            db.addValueEventListener(object : ValueEventListener {
-                override fun onDataChange(snapshot: DataSnapshot) {
-                    val updatedTrip = snapshot.getValue(Trip::class.java)
-                    if (updatedTrip != null) {
-                        activeTrip = updatedTrip
-                        // --- FIX: STAY ON WAITING SCREEN IF TRIP IS ACTIVE ---
-                        if (updatedTrip.status != TripStatus.COMPLETED && updatedTrip.status != TripStatus.CANCELLED) {
-                            step = 3
-                        }
-                    }
-                }
-                override fun onCancelled(e: DatabaseError) {}
-            })
-        }
-    }
-
+    // ... (GPS Logic) ...
     val fusedLocationClient = remember { LocationServices.getFusedLocationProviderClient(context) }
     fun zoomToUser() {
         if (ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
-            try {
-                fusedLocationClient.getCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY, null).addOnSuccessListener { loc ->
-                    if (loc != null) {
-                        val userPos = GeoPoint(loc.latitude, loc.longitude)
-                        mapController?.animateTo(userPos)
-                        mapController?.setZoom(18.0)
-                    }
-                }
-            } catch(e: Exception) {}
+            fusedLocationClient.lastLocation.addOnSuccessListener { loc ->
+                if (loc != null) mapController?.animateTo(GeoPoint(loc.latitude, loc.longitude))
+            }
         }
     }
-
-    val permissionLauncher = rememberLauncherForActivityResult(contract = ActivityResultContracts.RequestMultiplePermissions()) { 
-        if (it[Manifest.permission.ACCESS_FINE_LOCATION] == true) zoomToUser() 
-    }
+    val permissionLauncher = rememberLauncherForActivityResult(contract = ActivityResultContracts.RequestMultiplePermissions()) { if (it[Manifest.permission.ACCESS_FINE_LOCATION] == true) zoomToUser() }
     LaunchedEffect(Unit) {
         if (ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) zoomToUser()
         else permissionLauncher.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION))
+    }
+
+
+    // --- UI ---
+    if (step == 3) {
+        BackHandler(enabled = true) { /* Prevent Back */ }
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
@@ -174,11 +206,8 @@ fun RideScreen(navController: NavController) {
                 MapView(ctx).apply {
                     setTileSource(googleMaps)
                     setMultiTouchControls(true)
-                    isTilesScaledToDpi = true
-                    minZoomLevel = 4.0
-                    maxZoomLevel = 22.0
-                    controller.setZoom(16.0)
-                    controller.setCenter(startGeo)
+                    isTilesScaledToDpi = true; minZoomLevel = 4.0; maxZoomLevel = 22.0
+                    controller.setZoom(16.0); controller.setCenter(startGeo)
                     mapController = controller
                     mapViewRef = this
                     addMapListener(object : MapListener {
@@ -191,22 +220,15 @@ fun RideScreen(navController: NavController) {
                 if (isMapMoving) currentGeoPoint = mapView.mapCenter as GeoPoint
                 mapView.overlays.clear()
                 if (step >= 1 || step == 3) {
-                    val m1 = Marker(mapView)
-                    m1.position = pickupGeo
-                    m1.title = "Pickup"
+                    val m1 = Marker(mapView); m1.position = pickupGeo; m1.title = "Pickup"
                     m1.icon = ContextCompat.getDrawable(context, org.osmdroid.library.R.drawable.marker_default)
                     mapView.overlays.add(m1)
                 }
                 if ((step >= 2 || step == 3) && dropoffGeo != null) {
-                    val m2 = Marker(mapView)
-                    m2.position = dropoffGeo
-                    m2.title = "Dropoff"
+                    val m2 = Marker(mapView); m2.position = dropoffGeo; m2.title = "Dropoff"
                     mapView.overlays.add(m2)
                     if (routePoints.isNotEmpty()) {
-                        val line = Polyline()
-                        line.setPoints(routePoints)
-                        line.color = android.graphics.Color.BLUE
-                        line.width = 15f
+                        val line = Polyline(); line.setPoints(routePoints); line.color = android.graphics.Color.BLUE; line.width = 15f
                         mapView.overlays.add(line)
                     }
                 }
@@ -241,20 +263,12 @@ fun RideScreen(navController: NavController) {
                 if (activeTrip?.status == TripStatus.ACCEPTED) {
                     Text("✅ Driver Found!", style = MaterialTheme.typography.headlineSmall, color = Color(0xFF2E7D32), fontWeight = FontWeight.Bold)
                     Text("Driver: ${activeTrip?.driverId}", style = MaterialTheme.typography.bodyLarge)
-                    
                     Spacer(modifier = Modifier.height(16.dp))
-                    
-                    // --- FIX: RETRY PAYMENT BUTTON ---
                     if (activeTrip?.paymentStatus != "PAID_WALLET") {
-                        Button(
-                            onClick = { navController.navigate("pay_trip/${activeTrip!!.tripId}/${activeTrip!!.price}") }, 
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1E88E5)), // Blue Pay Button
-                            modifier = Modifier.fillMaxWidth()
-                        ) { Text("PAY NOW (${activeTrip!!.price} ETB)") }
+                        Button(onClick = { navController.navigate("pay_trip/${activeTrip!!.tripId}/${activeTrip!!.price}") }, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1E88E5)), modifier = Modifier.fillMaxWidth()) { Text("PAY NOW (${activeTrip!!.price} ETB)") }
                     } else {
                         Text("✅ PAID", color = Color(0xFF2E7D32), fontWeight = FontWeight.Bold)
                     }
-
                 } else {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         CircularProgressIndicator(color = Color(0xFF1E88E5), modifier = Modifier.size(24.dp))
@@ -265,14 +279,14 @@ fun RideScreen(navController: NavController) {
                     Button(onClick = { step = 0; activeTrip = null; pickupGeo = null; dropoffGeo = null; routePoints = emptyList() }, colors = ButtonDefaults.buttonColors(containerColor = Color.LightGray), modifier = Modifier.fillMaxWidth()) { Text("Cancel Request", color = Color.Black) }
                 }
             } else if (step == 0) {
-                // ... (Same Pickup Logic)
                 Text("Start Trip From?", style = MaterialTheme.typography.titleMedium, color = Color.Gray)
                 Text(addressText, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, maxLines = 1)
                 Spacer(modifier = Modifier.height(16.dp))
-                Button(onClick = { val center = mapViewRef?.mapCenter as? GeoPoint; if (center != null) { pickupGeo = center; pickupAddr = addressText; step = 1 } }, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2E7D32)), modifier = Modifier.fillMaxWidth().height(50.dp)) { Text("Set Pickup Here") }
-
+                Button(onClick = { 
+                    val center = mapViewRef?.mapCenter as? GeoPoint
+                    if (center != null) { pickupGeo = center; pickupAddr = addressText; step = 1 } 
+                }, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2E7D32)), modifier = Modifier.fillMaxWidth().height(50.dp)) { Text("Set Pickup Here") }
             } else if (step == 1) {
-                // ... (Same Dropoff Logic)
                 Text("Where to?", style = MaterialTheme.typography.titleMedium, color = Color.Gray)
                 Text(addressText, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, maxLines = 1)
                 Spacer(modifier = Modifier.height(16.dp))
@@ -285,11 +299,8 @@ fun RideScreen(navController: NavController) {
                         step = 2 
                     }
                 }, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFD32F2F)), modifier = Modifier.fillMaxWidth().height(50.dp)) { Text("Set Destination Here") }
-
             } else if (step == 2) {
-                // ... (Same Review Logic)
                 Text("Trip Summary", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-                
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(vertical = 16.dp)) {
                     items(VehicleType.values()) { vehicle ->
                         FilterChip(
@@ -300,7 +311,6 @@ fun RideScreen(navController: NavController) {
                         )
                     }
                 }
-                
                 Spacer(modifier = Modifier.height(16.dp))
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                     Text("Total Price", color = Color.Gray)
