@@ -20,17 +20,47 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import com.bayera.travel.common.payment.ChapaManager
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import java.util.UUID
+import com.google.firebase.database.FirebaseDatabase
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun WalletScreen(navController: NavController) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     val prefs = context.getSharedPreferences("user_prefs", Context.MODE_PRIVATE)
     
     var balance by remember { mutableFloatStateOf(prefs.getFloat("wallet_balance", 0.0f)) }
     var amountText by remember { mutableStateOf("") }
     var isLoading by remember { mutableStateOf(false) }
+    var showConfirmDialog by remember { mutableStateOf(false) }
+    var pendingAmount by remember { mutableStateOf(0.0) }
+
+    if (showConfirmDialog) {
+        AlertDialog(
+            onDismissRequest = { showConfirmDialog = false },
+            title = { Text("Confirm Payment") },
+            text = { Text("Did you complete the payment on Telebirr/Chapa?") },
+            confirmButton = {
+                TextButton(onClick = {
+                    // Update Balance ONLY if user confirms
+                    val newBal = balance + pendingAmount.toFloat()
+                    val userPhone = prefs.getString("phone", "")?.replace("+", "") ?: "unknown"
+                    val db = FirebaseDatabase.getInstance().getReference("users").child(userPhone).child("wallet_balance")
+                    db.setValue(newBal)
+                    
+                    balance = newBal
+                    showConfirmDialog = false
+                    Toast.makeText(context, "Balance Updated!", Toast.LENGTH_SHORT).show()
+                }) { Text("Yes, I Paid") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showConfirmDialog = false }) { Text("No, Cancel") }
+            }
+        )
+    }
 
     Scaffold(
         topBar = {
@@ -41,9 +71,16 @@ fun WalletScreen(navController: NavController) {
         }
     ) { padding ->
         Column(modifier = Modifier.padding(padding).padding(16.dp)) {
-            
-            Card(modifier = Modifier.fillMaxWidth().height(140.dp), colors = CardDefaults.cardColors(containerColor = Color(0xFF2E7D32)), elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)) {
-                Column(modifier = Modifier.fillMaxSize(), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
+            Card(
+                modifier = Modifier.fillMaxWidth().height(140.dp),
+                colors = CardDefaults.cardColors(containerColor = Color(0xFF2E7D32)), 
+                elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
+            ) {
+                Column(
+                    modifier = Modifier.fillMaxSize(),
+                    verticalArrangement = Arrangement.Center,
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
                     Icon(Icons.Default.AccountBalanceWallet, null, tint = Color.White, modifier = Modifier.size(40.dp))
                     Text("Current Balance", color = Color.White.copy(alpha = 0.8f))
                     Text("$balance ETB", style = MaterialTheme.typography.headlineLarge, color = Color.White, fontWeight = FontWeight.Bold)
@@ -62,8 +99,6 @@ fun WalletScreen(navController: NavController) {
                     if (amount != null && amount >= 5.0) {
                         isLoading = true
                         val txRef = "TX-${UUID.randomUUID().toString().take(10)}"
-                        
-                        // FIX: Using your verified email
                         val email = "Yeabkalkassahun21@gmail.com" 
                         val fName = prefs.getString("name", "User") ?: "User"
                         val lName = "Customer"
@@ -72,15 +107,13 @@ fun WalletScreen(navController: NavController) {
                             android.os.Handler(android.os.Looper.getMainLooper()).post {
                                 isLoading = false
                                 if (url != null) {
-                                    try {
-                                        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
-                                        context.startActivity(intent)
-                                        val newBal = balance + amount.toFloat()
-                                        prefs.edit().putFloat("wallet_balance", newBal).apply()
-                                        balance = newBal
-                                    } catch (e: Exception) { Toast.makeText(context, "No Browser Found", Toast.LENGTH_LONG).show() }
+                                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
+                                    context.startActivity(intent)
+                                    // Don't update balance yet! Show Dialog.
+                                    pendingAmount = amount
+                                    showConfirmDialog = true
                                 } else {
-                                    Toast.makeText(context, "Failed: ${error ?: "Unknown Error"}", Toast.LENGTH_LONG).show()
+                                    Toast.makeText(context, "Failed: $error", Toast.LENGTH_LONG).show()
                                 }
                             }
                         }
