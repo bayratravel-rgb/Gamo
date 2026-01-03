@@ -16,7 +16,6 @@ import com.google.firebase.FirebaseApp
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        try { FirebaseApp.initializeApp(this) } catch (e: Exception) {}
         setContent {
             MaterialTheme {
                 Surface(modifier = Modifier.fillMaxSize(), color = Color(0xFFECEFF1)) {

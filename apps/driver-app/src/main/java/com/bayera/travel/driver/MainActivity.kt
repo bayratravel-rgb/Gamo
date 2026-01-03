@@ -36,7 +36,6 @@ import com.bayera.travel.common.models.TripStatus
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        try { FirebaseApp.initializeApp(this) } catch (e: Exception) {}
 
         setContent {
             val navController = rememberNavController()
