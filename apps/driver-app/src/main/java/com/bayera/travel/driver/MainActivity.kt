@@ -13,7 +13,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -22,10 +21,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -45,13 +42,12 @@ import java.io.StringWriter
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-
-        // 1. GLOBAL CRASH HANDLER (The Safety Net)
+        
+        // --- GLOBAL CRASH HANDLER ---
         Thread.setDefaultUncaughtExceptionHandler { _, e ->
             val sw = StringWriter()
             e.printStackTrace(PrintWriter(sw))
             val stackTrace = sw.toString()
-            
             val intent = Intent(this, MainActivity::class.java)
             intent.putExtra("error", stackTrace)
             intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_CLEAR_TASK or Intent.FLAG_ACTIVITY_NEW_TASK)
@@ -65,60 +61,43 @@ class MainActivity : ComponentActivity() {
             return
         }
 
-        // 2. Safe Init
         try { FirebaseApp.initializeApp(this) } catch (e: Exception) {}
 
         setContent {
             val navController = rememberNavController()
             val context = LocalContext.current
+            val prefs = try { context.getSharedPreferences("driver_prefs", Context.MODE_PRIVATE) } catch(e:Exception){ null }
             
-            // Safe Prefs Loading
-            val prefs = try {
-                context.getSharedPreferences("driver_prefs", Context.MODE_PRIVATE)
-            } catch (e: Exception) { null }
+            // Logic: If name exists, go to dashboard. Else login.
+            val startScreen = if (prefs?.getString("name", "").isNullOrEmpty()) "login" else "dashboard"
 
-            val startScreen = if (prefs?.getString("name", "").isNullOrEmpty()) "login" else "super_dashboard"
-
-            // 3. The Real App Content
             NavHost(navController = navController, startDestination = startScreen) {
                 composable("login") { LoginScreen(navController) }
-                composable("super_dashboard") { DriverSuperDashboard(navController) }
+                composable("dashboard") { DriverSuperDashboard(navController) }
                 composable("wallet") { WalletScreen(navController) }
             }
         }
     }
 }
 
-// --- CRASH SCREEN UI ---
 @Composable
 fun ErrorScreen(error: String) {
     MaterialTheme {
         Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(Color(0xFF121212))
-                .padding(16.dp)
-                .verticalScroll(rememberScrollState())
+            modifier = Modifier.fillMaxSize().background(Color.White).padding(16.dp).verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.Center,
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Text("⚠️ APP CRASHED", color = Color.Red, fontSize = 24.sp, fontWeight = FontWeight.Bold)
-            Spacer(modifier = Modifier.height(10.dp))
-            Text("Please screenshot this error:", color = Color.White)
-            Spacer(modifier = Modifier.height(10.dp))
-            
-            SelectionContainer {
-                Text(
-                    text = error,
-                    color = Color.Yellow,
-                    fontFamily = FontFamily.Monospace,
-                    fontSize = 12.sp,
-                    modifier = Modifier.background(Color.Black).padding(8.dp)
-                )
-            }
+            Icon(Icons.Default.Warning, null, tint = Color.Red, modifier = Modifier.size(64.dp))
+            Text("App Crashed", style = MaterialTheme.typography.headlineMedium, color = Color.Red)
+            Spacer(modifier = Modifier.height(16.dp))
+            Text("Error Details:", fontWeight = FontWeight.Bold)
+            Text(error, color = Color.Gray)
         }
     }
 }
 
-// --- YOUR REAL DRIVER APP LOGIC BELOW ---
+// --- RESTORED LOGIC BELOW ---
 
 @Composable
 fun DriverSuperDashboard(navController: NavController) {
@@ -200,47 +179,21 @@ fun ActiveJobCard(trip: Trip) {
     Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Color(0xFFC8E6C9)), elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)) {
         Column(modifier = Modifier.padding(16.dp)) {
             Text("CURRENT TRIP", fontWeight = FontWeight.Bold, color = Color(0xFF1B5E20))
-            Text("📍 From: ${trip.pickupLocation.address}")
-            Text("🏁 To: ${trip.dropoffLocation.address}")
-            
-            if (trip.paymentStatus == "PAID_WALLET") {
-                 Text("✅ PAID VIA WALLET", fontWeight = FontWeight.Bold, color = Color(0xFF2E7D32))
-            } else {
-                 Text("💰 Collect: ${trip.price} ETB", fontWeight = FontWeight.Bold)
-            }
-            
+            Text("From: ${trip.pickupLocation.address}")
+            Text("To: ${trip.dropoffLocation.address}")
+            Text(if (trip.paymentStatus == "PAID_WALLET") "PAID VIA WALLET" else "Collect: ${trip.price}", fontWeight = FontWeight.Bold)
             Spacer(modifier = Modifier.height(16.dp))
             
             if (trip.status == TripStatus.ACCEPTED) {
-                Button(onClick = { 
-                    val uri = "google.navigation:q=${trip.pickupLocation.lat},${trip.pickupLocation.lng}"
-                    startNav(context, uri)
-                }, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1976D2)), modifier = Modifier.fillMaxWidth()) { Text("NAVIGATE TO PICKUP") }
+                Button(onClick = { val uri = "google.navigation:q=${trip.pickupLocation.lat},${trip.pickupLocation.lng}"; startNav(context, uri) }, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1976D2)), modifier = Modifier.fillMaxWidth()) { Text("NAV TO PICKUP") }
                 Button(onClick = { db.child("status").setValue(TripStatus.IN_PROGRESS) }, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2E7D32)), modifier = Modifier.fillMaxWidth()) { Text("START TRIP") }
             } else if (trip.status == TripStatus.IN_PROGRESS) {
-                Button(onClick = { 
-                    val uri = "google.navigation:q=${trip.dropoffLocation.lat},${trip.dropoffLocation.lng}"
-                    startNav(context, uri)
-                }, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFD32F2F)), modifier = Modifier.fillMaxWidth()) { Text("NAVIGATE TO DROP-OFF") }
+                Button(onClick = { val uri = "google.navigation:q=${trip.dropoffLocation.lat},${trip.dropoffLocation.lng}"; startNav(context, uri) }, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFD32F2F)), modifier = Modifier.fillMaxWidth()) { Text("NAV TO DROP-OFF") }
                 
-                if (trip.paymentStatus != "PAID_WALLET") {
-                    Button(
-                        onClick = { 
-                            updateBalance(driverId, trip.price, true, context)
-                            db.child("status").setValue(TripStatus.COMPLETED)
-                        },
-                        colors = ButtonDefaults.buttonColors(containerColor = Color.Black),
-                        modifier = Modifier.fillMaxWidth()
-                    ) { Text("COLLECT CASH") }
+                if (trip.paymentStatus == "PAID_WALLET") {
+                    Button(onClick = { updateBalance(driverId, trip.price, false, context); db.child("status").setValue(TripStatus.COMPLETED) }, modifier = Modifier.fillMaxWidth()) { Text("COMPLETE (Paid)") }
                 } else {
-                    Button(
-                        onClick = { 
-                            updateBalance(driverId, trip.price, false, context)
-                            db.child("status").setValue(TripStatus.COMPLETED)
-                        },
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2E7D32)),
-                        modifier = Modifier.fillMaxWidth()
-                    ) { Text("COMPLETE TRIP") }
+                    Button(onClick = { updateBalance(driverId, trip.price, true, context); db.child("status").setValue(TripStatus.COMPLETED) }, colors = ButtonDefaults.buttonColors(containerColor = Color.Black), modifier = Modifier.fillMaxWidth()) { Text("COLLECT CASH") }
                 }
             }
         }
@@ -256,10 +209,7 @@ fun updateBalance(driverId: String, amount: Double, isCash: Boolean, context: Co
             currentData.value = newBalance
             return Transaction.success(currentData)
         }
-        override fun onComplete(e: DatabaseError?, b: Boolean, s: DataSnapshot?) {
-            if(e != null) Toast.makeText(context, "Error: ${e.message}", Toast.LENGTH_SHORT).show()
-            else Toast.makeText(context, "Balance Updated!", Toast.LENGTH_SHORT).show()
-        }
+        override fun onComplete(e: DatabaseError?, b: Boolean, s: DataSnapshot?) {}
     })
 }
 
@@ -278,7 +228,6 @@ fun RideCard(trip: Trip, driverId: String) {
             Button(onClick = { 
                 FirebaseDatabase.getInstance().getReference("trips").child(trip.tripId)
                    .updateChildren(mapOf("status" to "ACCEPTED", "driverId" to driverId))
-                Toast.makeText(context, "Accepted!", Toast.LENGTH_SHORT).show()
             }, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2E7D32)), modifier = Modifier.fillMaxWidth()) { Text("ACCEPT RIDE") }
         }
     }
