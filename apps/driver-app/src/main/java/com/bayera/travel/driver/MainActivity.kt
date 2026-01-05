@@ -1,6 +1,5 @@
 package com.bayera.travel.driver
 
-// ... (Imports) ...
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
@@ -13,7 +12,12 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.filled.AccountBalanceWallet
+import androidx.compose.material.icons.filled.ArrowForward
+import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Place
+import androidx.compose.material.icons.filled.ShoppingCart
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -40,11 +44,13 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         try { FirebaseApp.initializeApp(this) } catch (e: Exception) {}
+
         setContent {
             val navController = rememberNavController()
             val context = LocalContext.current
             val prefs = context.getSharedPreferences("driver_prefs", Context.MODE_PRIVATE)
             val startScreen = if (prefs.getString("name", "").isNullOrEmpty()) "login" else "super_dashboard"
+
             NavHost(navController = navController, startDestination = startScreen) {
                 composable("login") { LoginScreen(navController) }
                 composable("super_dashboard") { DriverSuperDashboard(navController) }
@@ -54,64 +60,140 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-// ... (Dashboard & Lists code omitted for brevity, assuming standard) ...
 @Composable
-fun DriverSuperDashboard(navController: NavController) { RideRequestsScreen(navController) } 
-// Need to pass NavController or setup screens properly. Assuming simplified for script.
-
-@Composable
-fun RideRequestsScreen(navController: NavController) {
+fun DriverSuperDashboard(navController: NavController) {
     val context = LocalContext.current
     val prefs = context.getSharedPreferences("driver_prefs", Context.MODE_PRIVATE)
     val driverName = prefs.getString("name", "Partner") ?: "Partner"
-    // Clean Phone ID for Database
-    val driverId = prefs.getString("phone", "000")?.filter { it.isDigit() } ?: "000"
+    var selectedTab by remember { mutableIntStateOf(0) }
 
-    var currentJob by remember { mutableStateOf<Trip?>(null) }
-    
-    LaunchedEffect(Unit) {
-        // Listener Logic...
-    }
-    
-    // ... (Display Logic) ...
-    if (currentJob != null) {
-        ActiveJobCard(currentJob!!, driverId)
+    Scaffold(
+        bottomBar = {
+            NavigationBar(containerColor = Color.White) {
+                NavigationBarItem(
+                    icon = { Icon(Icons.Default.Home, null) }, label = { Text("Rides") },
+                    selected = selectedTab == 0, onClick = { selectedTab = 0 },
+                    colors = NavigationBarItemDefaults.colors(selectedIconColor = Color(0xFF2E7D32))
+                )
+                NavigationBarItem(
+                    icon = { Icon(Icons.Default.AccountBalanceWallet, null) }, label = { Text("Earnings") },
+                    selected = false, onClick = { navController.navigate("wallet") },
+                    colors = NavigationBarItemDefaults.colors(selectedIconColor = Color.Black)
+                )
+            }
+        }
+    ) { padding ->
+        Column(modifier = Modifier.padding(padding).fillMaxSize().background(if (selectedTab == 0) Color(0xFFE8F5E9) else Color(0xFFFFF3E0)).padding(16.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("Hi, $driverName", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                Spacer(modifier = Modifier.weight(1f))
+                TextButton(onClick = { prefs.edit().clear().apply(); navController.navigate("login") { popUpTo(0) } }) { Text("Logout", color = Color.Red) }
+            }
+            Spacer(modifier = Modifier.height(16.dp))
+            if (selectedTab == 0) RideRequestsScreen(driverName) else Text("Delivery Coming Soon")
+        }
     }
 }
 
 @Composable
-fun ActiveJobCard(trip: Trip, driverId: String) {
+fun RideRequestsScreen(driverName: String) {
+    var activeTrips by remember { mutableStateOf<List<Trip>>(emptyList()) }
+    var currentJob by remember { mutableStateOf<Trip?>(null) }
+    
+    LaunchedEffect(Unit) {
+        val db = FirebaseDatabase.getInstance().getReference("trips")
+        db.addValueEventListener(object : ValueEventListener {
+            override fun onDataChange(snapshot: DataSnapshot) {
+                val trips = mutableListOf<Trip>()
+                var myJob: Trip? = null
+                for (child in snapshot.children) {
+                    try {
+                        val trip = child.getValue(Trip::class.java)
+                        if (trip != null) {
+                            if (trip.driverId != null && trip.driverId!!.contains(driverName) && 
+                                trip.status != TripStatus.COMPLETED && trip.status != TripStatus.CANCELLED) {
+                                myJob = trip
+                            }
+                            if (trip.status == TripStatus.REQUESTED) {
+                                trips.add(trip)
+                            }
+                        }
+                    } catch (e: Exception) {}
+                }
+                activeTrips = trips.reversed()
+                currentJob = myJob
+            }
+            override fun onCancelled(e: DatabaseError) {}
+        })
+    }
+
+    if (currentJob != null) {
+        ActiveJobCard(currentJob!!)
+    } else {
+        Text("Incoming Rides", style = MaterialTheme.typography.headlineSmall, color = Color(0xFF2E7D32), fontWeight = FontWeight.Bold)
+        LazyColumn { items(activeTrips) { trip -> RideCard(trip, driverName) } }
+    }
+}
+
+@Composable
+fun ActiveJobCard(trip: Trip) {
     val context = LocalContext.current
     val db = FirebaseDatabase.getInstance().getReference("trips").child(trip.tripId)
+    val prefs = context.getSharedPreferences("driver_prefs", Context.MODE_PRIVATE)
     
-    Card(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
+    // FIX: Proper ID extraction
+    val rawPhone = prefs.getString("phone", "000") ?: "000"
+    val driverId = rawPhone.filter { it.isDigit() }
+
+    Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Color(0xFFC8E6C9)), elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)) {
         Column(modifier = Modifier.padding(16.dp)) {
-            Text("CURRENT TRIP", fontWeight = FontWeight.Bold)
-            Text("From: ${trip.pickupLocation.address}")
-            Text("To: ${trip.dropoffLocation.address}")
+            Text("CURRENT TRIP", fontWeight = FontWeight.Bold, color = Color(0xFF1B5E20))
+            Text("📍 From: ${trip.pickupLocation.address}")
+            Text("🏁 To: ${trip.dropoffLocation.address}")
             
             if (trip.paymentStatus == "PAID_WALLET") {
-                Text("PAID VIA WALLET", color = Color.Green, fontWeight = FontWeight.Bold)
+                 Text("PAID VIA WALLET", fontWeight = FontWeight.Bold, color = Color(0xFF2E7D32))
             } else {
-                Text("Collect Cash: ${trip.price}", fontWeight = FontWeight.Bold)
+                 Text("💰 Collect Cash: ${trip.price} ETB", fontWeight = FontWeight.Bold)
             }
             
             Spacer(modifier = Modifier.height(16.dp))
             
-            if (trip.status == TripStatus.IN_PROGRESS) {
-                // --- SEPARATE BUTTONS ---
-                if (trip.paymentStatus == "PAID_WALLET") {
-                    Button(onClick = { 
-                        updateBalance(driverId, trip.price, isCash = false, context)
-                        db.child("status").setValue(TripStatus.COMPLETED)
-                    }) { Text("COMPLETE TRIP") }
+            if (trip.status == TripStatus.ACCEPTED) {
+                Button(onClick = { 
+                    val uri = "google.navigation:q=${trip.pickupLocation.lat},${trip.pickupLocation.lng}"
+                    startNav(context, uri)
+                }, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1976D2)), modifier = Modifier.fillMaxWidth()) { Text("NAVIGATE TO PICKUP") }
+                
+                Spacer(modifier = Modifier.height(8.dp))
+                Button(onClick = { db.child("status").setValue(TripStatus.IN_PROGRESS) }, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2E7D32)), modifier = Modifier.fillMaxWidth()) { Text("START TRIP") }
+            
+            } else if (trip.status == TripStatus.IN_PROGRESS) {
+                Button(onClick = { 
+                    val uri = "google.navigation:q=${trip.dropoffLocation.lat},${trip.dropoffLocation.lng}"
+                    startNav(context, uri)
+                }, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFD32F2F)), modifier = Modifier.fillMaxWidth()) { Text("NAVIGATE TO DROP-OFF") }
+                
+                Spacer(modifier = Modifier.height(8.dp))
+
+                if (trip.paymentStatus != "PAID_WALLET") {
+                    Button(
+                        onClick = { 
+                            updateBalance(driverId, trip.price, true, context)
+                            db.child("status").setValue(TripStatus.COMPLETED)
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = Color.Black),
+                        modifier = Modifier.fillMaxWidth()
+                    ) { Text("COLLECT CASH") }
                 } else {
-                    Button(onClick = { 
-                        updateBalance(driverId, trip.price, isCash = true, context)
-                        db.child("status").setValue(TripStatus.COMPLETED)
-                    }, colors = ButtonDefaults.buttonColors(containerColor = Color.Black)) { 
-                        Text("CASH COLLECTED") 
-                    }
+                    Button(
+                        onClick = { 
+                            updateBalance(driverId, trip.price, false, context)
+                            db.child("status").setValue(TripStatus.COMPLETED)
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2E7D32)),
+                        modifier = Modifier.fillMaxWidth()
+                    ) { Text("COMPLETE TRIP") }
                 }
             }
         }
@@ -120,7 +202,6 @@ fun ActiveJobCard(trip: Trip, driverId: String) {
 
 fun updateBalance(driverId: String, amount: Double, isCash: Boolean, context: Context) {
     val driverWalletRef = FirebaseDatabase.getInstance().getReference("drivers").child(driverId).child("balance")
-    
     driverWalletRef.runTransaction(object : Transaction.Handler {
         override fun doTransaction(currentData: MutableData): Transaction.Result {
             val currentBalance = currentData.getValue(Double::class.java) ?: 0.0
@@ -129,11 +210,28 @@ fun updateBalance(driverId: String, amount: Double, isCash: Boolean, context: Co
             return Transaction.success(currentData)
         }
         override fun onComplete(e: DatabaseError?, b: Boolean, s: DataSnapshot?) {
-            if (e != null) {
-                Toast.makeText(context, "Balance Error: ${e.message}", Toast.LENGTH_LONG).show()
-            } else {
-                Toast.makeText(context, "Balance Updated Successfully!", Toast.LENGTH_SHORT).show()
-            }
+            if(e != null) Toast.makeText(context, "Error: ${e.message}", Toast.LENGTH_SHORT).show()
+            else Toast.makeText(context, "Balance Updated!", Toast.LENGTH_SHORT).show()
         }
     })
+}
+
+fun startNav(context: Context, uri: String) {
+    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(uri))
+    intent.setPackage("com.google.android.apps.maps")
+    try { context.startActivity(intent) } catch (e: Exception) { Toast.makeText(context, "Google Maps not found", Toast.LENGTH_SHORT).show() }
+}
+
+@Composable
+fun RideCard(trip: Trip, driverId: String) {
+    val context = LocalContext.current
+    Card(modifier = Modifier.fillMaxWidth().padding(8.dp)) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text("📍 ${trip.pickupLocation.address}")
+            Button(onClick = { 
+                FirebaseDatabase.getInstance().getReference("trips").child(trip.tripId)
+                   .updateChildren(mapOf("status" to "ACCEPTED", "driverId" to driverId))
+            }, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2E7D32)), modifier = Modifier.fillMaxWidth()) { Text("ACCEPT RIDE") }
+        }
+    }
 }
