@@ -15,37 +15,15 @@ object ChapaManager {
             conn.setRequestProperty("Content-Type", "application/json")
             conn.doOutput = true
 
-            val jsonInputString = """
-                {
-                    "amount": "$amount",
-                    "currency": "ETB",
-                    "email": "$email",
-                    "first_name": "$firstName",
-                    "last_name": "$lastName",
-                    "tx_ref": "$txRef",
-                    "callback_url": "https://bayera-backend.onrender.com/callback",
-                    "customization": {
-                        "title": "Bayera Travel",
-                        "description": "Payment for Trip"
-                    }
-                }
-            """.trimIndent()
+            val json = "{\"amount\":\"$amount\",\"currency\":\"ETB\",\"email\":\"$email\",\"first_name\":\"$firstName\",\"last_name\":\"$lastName\",\"tx_ref\":\"$txRef\"}"
+            OutputStreamWriter(conn.outputStream).use { it.write(json) }
 
-            OutputStreamWriter(conn.outputStream).use { it.write(jsonInputString) }
-
-            val responseCode = conn.responseCode
-            if (responseCode == HttpURLConnection.HTTP_OK) {
+            if (conn.responseCode == 200) {
                 val scanner = Scanner(conn.inputStream).useDelimiter("\\A")
                 val response = if (scanner.hasNext()) scanner.next() else ""
-                // Simple parsing to find the checkout_url
                 val regex = "\"checkout_url\":\"(.*?)\"".toRegex()
                 regex.find(response)?.groupValues?.get(1)
-            } else {
-                null
-            }
-        } catch (e: Exception) {
-            e.printStackTrace()
-            null
-        }
+            } else null
+        } catch (e: Exception) { null }
     }
 }
