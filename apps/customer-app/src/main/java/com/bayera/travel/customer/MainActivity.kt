@@ -112,7 +112,7 @@ fun TripStatusPanel(trip: Trip) {
                 }
                 else -> {}
             }
-            HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp))
+            Divider(modifier = Modifier.padding(vertical = 12.dp))
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 Text("Price: ${trip.price} ETB")
                 Text("Pay via: ${trip.paymentMethod}")
