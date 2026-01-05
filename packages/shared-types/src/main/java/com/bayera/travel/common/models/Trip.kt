@@ -3,16 +3,16 @@ package com.bayera.travel.common.models
 data class Trip(
     val tripId: String = "",
     val customerId: String = "",
+    val customerPhone: String = "",
     val driverId: String? = null,
+    val driverName: String? = null,
     val pickupLocation: Location = Location(),
     val dropoffLocation: Location = Location(),
-    val status: TripStatus = TripStatus.REQUESTED,
     val price: Double = 0.0,
-    val estimatedTime: Int = 0,
-    val pickupNotes: String = "",
-    val vehicleType: VehicleType = VehicleType.BAJAJ,
-    // --- NEW FIELD ---
-    val paymentStatus: String = "PENDING" // PENDING, PAID_CASH, PAID_WALLET
+    val status: TripStatus = TripStatus.REQUESTED,
+    val paymentMethod: String = "CASH", // "CASH" or "WALLET"
+    val paymentStatus: String = "PENDING",
+    val notes: String = ""
 )
 
 data class Location(
@@ -23,8 +23,4 @@ data class Location(
 
 enum class TripStatus {
     REQUESTED, ACCEPTED, IN_PROGRESS, COMPLETED, CANCELLED
-}
-
-enum class VehicleType {
-    BAJAJ, COMFORT, LUXURY, POOL
 }
