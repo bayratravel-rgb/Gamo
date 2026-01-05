@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
+import android.util.Log
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -11,13 +12,10 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AccountBalanceWallet
-import androidx.compose.material.icons.filled.ArrowForward
-import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.Place
-import androidx.compose.material.icons.filled.ShoppingCart
-import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -39,23 +37,64 @@ import com.google.firebase.database.Transaction
 import com.google.firebase.database.ValueEventListener
 import com.bayera.travel.common.models.Trip
 import com.bayera.travel.common.models.TripStatus
+import java.io.PrintWriter
+import java.io.StringWriter
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        
+        // --- GLOBAL CRASH HANDLER ---
+        Thread.setDefaultUncaughtExceptionHandler { _, e ->
+            val sw = StringWriter()
+            e.printStackTrace(PrintWriter(sw))
+            val stackTrace = sw.toString()
+            
+            // Restart App with Error
+            val intent = Intent(this, MainActivity::class.java)
+            intent.putExtra("error", stackTrace)
+            intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_CLEAR_TASK or Intent.FLAG_ACTIVITY_NEW_TASK)
+            startActivity(intent)
+            android.os.Process.killProcess(android.os.Process.myPid())
+        }
+
+        val errorMsg = intent.getStringExtra("error")
+        
+        if (errorMsg != null) {
+            setContent { ErrorScreen(errorMsg) }
+            return
+        }
+
         try { FirebaseApp.initializeApp(this) } catch (e: Exception) {}
 
         setContent {
             val navController = rememberNavController()
             val context = LocalContext.current
-            val prefs = context.getSharedPreferences("driver_prefs", Context.MODE_PRIVATE)
-            val startScreen = if (prefs.getString("name", "").isNullOrEmpty()) "login" else "super_dashboard"
+            val prefs = try { context.getSharedPreferences("driver_prefs", Context.MODE_PRIVATE) } catch(e:Exception){ null }
+            val startScreen = if (prefs?.getString("name", "").isNullOrEmpty()) "login" else "super_dashboard"
 
             NavHost(navController = navController, startDestination = startScreen) {
                 composable("login") { LoginScreen(navController) }
                 composable("super_dashboard") { DriverSuperDashboard(navController) }
                 composable("wallet") { WalletScreen(navController) }
             }
+        }
+    }
+}
+
+@Composable
+fun ErrorScreen(error: String) {
+    MaterialTheme {
+        Column(
+            modifier = Modifier.fillMaxSize().background(Color.White).padding(16.dp).verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.Center,
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Icon(Icons.Default.Warning, null, tint = Color.Red, modifier = Modifier.size(64.dp))
+            Text("App Crashed", style = MaterialTheme.typography.headlineMedium, color = Color.Red)
+            Spacer(modifier = Modifier.height(16.dp))
+            Text("Error Details:", fontWeight = FontWeight.Bold)
+            Text(error, color = Color.Gray)
         }
     }
 }
@@ -110,13 +149,8 @@ fun RideRequestsScreen(driverName: String) {
                     try {
                         val trip = child.getValue(Trip::class.java)
                         if (trip != null) {
-                            if (trip.driverId != null && trip.driverId!!.contains(driverName) && 
-                                trip.status != TripStatus.COMPLETED && trip.status != TripStatus.CANCELLED) {
-                                myJob = trip
-                            }
-                            if (trip.status == TripStatus.REQUESTED) {
-                                trips.add(trip)
-                            }
+                            if (trip.driverId != null && trip.driverId!!.contains(driverName) && trip.status != TripStatus.COMPLETED && trip.status != TripStatus.CANCELLED) myJob = trip
+                            if (trip.status == TripStatus.REQUESTED) trips.add(trip)
                         }
                     } catch (e: Exception) {}
                 }
@@ -127,12 +161,7 @@ fun RideRequestsScreen(driverName: String) {
         })
     }
 
-    if (currentJob != null) {
-        ActiveJobCard(currentJob!!)
-    } else {
-        Text("Incoming Rides", style = MaterialTheme.typography.headlineSmall, color = Color(0xFF2E7D32), fontWeight = FontWeight.Bold)
-        LazyColumn { items(activeTrips) { trip -> RideCard(trip, driverName) } }
-    }
+    if (currentJob != null) ActiveJobCard(currentJob!!) else LazyColumn { items(activeTrips) { trip -> RideCard(trip, driverName) } }
 }
 
 @Composable
@@ -140,10 +169,7 @@ fun ActiveJobCard(trip: Trip) {
     val context = LocalContext.current
     val db = FirebaseDatabase.getInstance().getReference("trips").child(trip.tripId)
     val prefs = context.getSharedPreferences("driver_prefs", Context.MODE_PRIVATE)
-    
-    // FIX: Proper ID extraction
-    val rawPhone = prefs.getString("phone", "000") ?: "000"
-    val driverId = rawPhone.filter { it.isDigit() }
+    val driverId = prefs.getString("phone", "000")?.filter { it.isDigit() } ?: "000"
 
     Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Color(0xFFC8E6C9)), elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)) {
         Column(modifier = Modifier.padding(16.dp)) {
@@ -164,18 +190,13 @@ fun ActiveJobCard(trip: Trip) {
                     val uri = "google.navigation:q=${trip.pickupLocation.lat},${trip.pickupLocation.lng}"
                     startNav(context, uri)
                 }, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1976D2)), modifier = Modifier.fillMaxWidth()) { Text("NAVIGATE TO PICKUP") }
-                
-                Spacer(modifier = Modifier.height(8.dp))
                 Button(onClick = { db.child("status").setValue(TripStatus.IN_PROGRESS) }, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2E7D32)), modifier = Modifier.fillMaxWidth()) { Text("START TRIP") }
-            
             } else if (trip.status == TripStatus.IN_PROGRESS) {
                 Button(onClick = { 
                     val uri = "google.navigation:q=${trip.dropoffLocation.lat},${trip.dropoffLocation.lng}"
                     startNav(context, uri)
                 }, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFD32F2F)), modifier = Modifier.fillMaxWidth()) { Text("NAVIGATE TO DROP-OFF") }
                 
-                Spacer(modifier = Modifier.height(8.dp))
-
                 if (trip.paymentStatus != "PAID_WALLET") {
                     Button(
                         onClick = { 
