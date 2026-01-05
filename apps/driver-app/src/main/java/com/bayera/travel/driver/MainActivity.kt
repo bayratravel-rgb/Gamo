@@ -4,7 +4,6 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
-import android.util.Log
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -14,6 +13,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -22,8 +22,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -43,14 +45,13 @@ import java.io.StringWriter
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        
-        // --- GLOBAL CRASH HANDLER ---
+
+        // 1. GLOBAL CRASH HANDLER (The Safety Net)
         Thread.setDefaultUncaughtExceptionHandler { _, e ->
             val sw = StringWriter()
             e.printStackTrace(PrintWriter(sw))
             val stackTrace = sw.toString()
             
-            // Restart App with Error
             val intent = Intent(this, MainActivity::class.java)
             intent.putExtra("error", stackTrace)
             intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_CLEAR_TASK or Intent.FLAG_ACTIVITY_NEW_TASK)
@@ -59,20 +60,26 @@ class MainActivity : ComponentActivity() {
         }
 
         val errorMsg = intent.getStringExtra("error")
-        
         if (errorMsg != null) {
             setContent { ErrorScreen(errorMsg) }
             return
         }
 
+        // 2. Safe Init
         try { FirebaseApp.initializeApp(this) } catch (e: Exception) {}
 
         setContent {
             val navController = rememberNavController()
             val context = LocalContext.current
-            val prefs = try { context.getSharedPreferences("driver_prefs", Context.MODE_PRIVATE) } catch(e:Exception){ null }
+            
+            // Safe Prefs Loading
+            val prefs = try {
+                context.getSharedPreferences("driver_prefs", Context.MODE_PRIVATE)
+            } catch (e: Exception) { null }
+
             val startScreen = if (prefs?.getString("name", "").isNullOrEmpty()) "login" else "super_dashboard"
 
+            // 3. The Real App Content
             NavHost(navController = navController, startDestination = startScreen) {
                 composable("login") { LoginScreen(navController) }
                 composable("super_dashboard") { DriverSuperDashboard(navController) }
@@ -82,22 +89,36 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+// --- CRASH SCREEN UI ---
 @Composable
 fun ErrorScreen(error: String) {
     MaterialTheme {
         Column(
-            modifier = Modifier.fillMaxSize().background(Color.White).padding(16.dp).verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.Center,
-            horizontalAlignment = Alignment.CenterHorizontally
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color(0xFF121212))
+                .padding(16.dp)
+                .verticalScroll(rememberScrollState())
         ) {
-            Icon(Icons.Default.Warning, null, tint = Color.Red, modifier = Modifier.size(64.dp))
-            Text("App Crashed", style = MaterialTheme.typography.headlineMedium, color = Color.Red)
-            Spacer(modifier = Modifier.height(16.dp))
-            Text("Error Details:", fontWeight = FontWeight.Bold)
-            Text(error, color = Color.Gray)
+            Text("⚠️ APP CRASHED", color = Color.Red, fontSize = 24.sp, fontWeight = FontWeight.Bold)
+            Spacer(modifier = Modifier.height(10.dp))
+            Text("Please screenshot this error:", color = Color.White)
+            Spacer(modifier = Modifier.height(10.dp))
+            
+            SelectionContainer {
+                Text(
+                    text = error,
+                    color = Color.Yellow,
+                    fontFamily = FontFamily.Monospace,
+                    fontSize = 12.sp,
+                    modifier = Modifier.background(Color.Black).padding(8.dp)
+                )
+            }
         }
     }
 }
+
+// --- YOUR REAL DRIVER APP LOGIC BELOW ---
 
 @Composable
 fun DriverSuperDashboard(navController: NavController) {
@@ -161,7 +182,12 @@ fun RideRequestsScreen(driverName: String) {
         })
     }
 
-    if (currentJob != null) ActiveJobCard(currentJob!!) else LazyColumn { items(activeTrips) { trip -> RideCard(trip, driverName) } }
+    if (currentJob != null) {
+        ActiveJobCard(currentJob!!)
+    } else {
+        Text("Incoming Rides", style = MaterialTheme.typography.headlineSmall, color = Color(0xFF2E7D32), fontWeight = FontWeight.Bold)
+        LazyColumn { items(activeTrips) { trip -> RideCard(trip, driverName) } }
+    }
 }
 
 @Composable
@@ -178,9 +204,9 @@ fun ActiveJobCard(trip: Trip) {
             Text("🏁 To: ${trip.dropoffLocation.address}")
             
             if (trip.paymentStatus == "PAID_WALLET") {
-                 Text("PAID VIA WALLET", fontWeight = FontWeight.Bold, color = Color(0xFF2E7D32))
+                 Text("✅ PAID VIA WALLET", fontWeight = FontWeight.Bold, color = Color(0xFF2E7D32))
             } else {
-                 Text("💰 Collect Cash: ${trip.price} ETB", fontWeight = FontWeight.Bold)
+                 Text("💰 Collect: ${trip.price} ETB", fontWeight = FontWeight.Bold)
             }
             
             Spacer(modifier = Modifier.height(16.dp))
@@ -252,6 +278,7 @@ fun RideCard(trip: Trip, driverId: String) {
             Button(onClick = { 
                 FirebaseDatabase.getInstance().getReference("trips").child(trip.tripId)
                    .updateChildren(mapOf("status" to "ACCEPTED", "driverId" to driverId))
+                Toast.makeText(context, "Accepted!", Toast.LENGTH_SHORT).show()
             }, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2E7D32)), modifier = Modifier.fillMaxWidth()) { Text("ACCEPT RIDE") }
         }
     }
