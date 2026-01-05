@@ -1,63 +1,51 @@
 package com.bayera.travel.common.payment
 
-import android.util.Log
-import okhttp3.MediaType.Companion.toMediaType
-import okhttp3.OkHttpClient
-import okhttp3.Request
-import okhttp3.RequestBody.Companion.toRequestBody
-import org.json.JSONObject
-import java.util.concurrent.TimeUnit
+import java.io.OutputStreamWriter
+import java.net.HttpURLConnection
+import java.net.URL
+import java.util.Scanner
 
 object ChapaManager {
-    private const val BASE_URL = "https://bayra-travel.onrender.com/api"
-    
-    fun initializePayment(email: String, amount: Double, firstName: String, lastName: String, txRef: String, callback: (String?, String?) -> Unit) {
-        val client = OkHttpClient.Builder().connectTimeout(60, TimeUnit.SECONDS).build()
-        val mediaType = "application/json; charset=utf-8".toMediaType()
-        val json = JSONObject()
-        json.put("amount", amount)
-        json.put("email", email)
-        json.put("firstName", firstName)
-        json.put("lastName", lastName)
-        json.put("txRef", txRef)
+    fun initializePayment(amount: Double, email: String, firstName: String, lastName: String, txRef: String, secretKey: String): String? {
+        return try {
+            val url = URL("https://api.chapa.co/v1/transaction/initialize")
+            val conn = url.openConnection() as HttpURLConnection
+            conn.requestMethod = "POST"
+            conn.setRequestProperty("Authorization", "Bearer $secretKey")
+            conn.setRequestProperty("Content-Type", "application/json")
+            conn.doOutput = true
 
-        val body = json.toString().toRequestBody(mediaType)
-        val request = Request.Builder().url("$BASE_URL/pay").post(body).build()
-
-        Thread {
-            try {
-                val response = client.newCall(request).execute()
-                val resBody = response.body?.string() ?: ""
-                if (response.isSuccessful) {
-                    val resJson = JSONObject(resBody)
-                    val url = resJson.optString("checkoutUrl")
-                    if (url.isNotEmpty()) callback(url, null) else callback(null, "No URL")
-                } else callback(null, "Server Error: $resBody")
-            } catch (e: Exception) { callback(null, e.message) }
-        }.start()
-    }
-
-    // --- NEW: VERIFY FUNCTION ---
-    fun verifyPayment(txRef: String, callback: (Boolean) -> Unit) {
-        val client = OkHttpClient.Builder().connectTimeout(30, TimeUnit.SECONDS).build()
-        val mediaType = "application/json; charset=utf-8".toMediaType()
-        val json = JSONObject()
-        json.put("txRef", txRef)
-        
-        val body = json.toString().toRequestBody(mediaType)
-        val request = Request.Builder().url("$BASE_URL/verify").post(body).build()
-
-        Thread {
-            try {
-                val response = client.newCall(request).execute()
-                if (response.isSuccessful) {
-                    callback(true) // Verified!
-                } else {
-                    callback(false)
+            val jsonInputString = """
+                {
+                    "amount": "$amount",
+                    "currency": "ETB",
+                    "email": "$email",
+                    "first_name": "$firstName",
+                    "last_name": "$lastName",
+                    "tx_ref": "$txRef",
+                    "callback_url": "https://bayera-backend.onrender.com/callback",
+                    "customization": {
+                        "title": "Bayera Travel",
+                        "description": "Payment for Trip"
+                    }
                 }
-            } catch (e: Exception) {
-                callback(false)
+            """.trimIndent()
+
+            OutputStreamWriter(conn.outputStream).use { it.write(jsonInputString) }
+
+            val responseCode = conn.responseCode
+            if (responseCode == HttpURLConnection.HTTP_OK) {
+                val scanner = Scanner(conn.inputStream).useDelimiter("\\A")
+                val response = if (scanner.hasNext()) scanner.next() else ""
+                // Simple parsing to find the checkout_url
+                val regex = "\"checkout_url\":\"(.*?)\"".toRegex()
+                regex.find(response)?.groupValues?.get(1)
+            } else {
+                null
             }
-        }.start()
+        } catch (e: Exception) {
+            e.printStackTrace()
+            null
+        }
     }
 }
