@@ -12,9 +12,7 @@ dependencyResolutionManagement {
         mavenCentral()
     }
 }
-
 rootProject.name = "BayeraTravel"
-
 include ':packages:shared-types'
 include ':apps:customer-app'
 include ':apps:driver-app'
