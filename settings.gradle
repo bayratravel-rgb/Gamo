@@ -9,10 +9,15 @@ dependencyResolutionManagement {
     repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
     repositories {
         google()
+        // Adding Maven Central with a mirror fallback
         mavenCentral()
+        maven { url 'https://maven.google.com' }
+        maven { url 'https://jitpack.io' }
     }
 }
+
 rootProject.name = "BayeraTravel"
+
 include ':packages:shared-types'
 include ':apps:customer-app'
 include ':apps:driver-app'
