@@ -1,3 +1,18 @@
+pluginManagement {
+    repositories {
+        google()
+        mavenCentral()
+        gradlePluginPortal()
+    }
+}
+dependencyResolutionManagement {
+    repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+    repositories {
+        google()
+        mavenCentral()
+    }
+}
+
 rootProject.name = "BayeraTravel"
 
 include ':packages:shared-types'
@@ -6,10 +21,3 @@ include ':apps:driver-app'
 include ':apps:merchant-app'
 include ':apps:hotel-reception-app'
 include ':apps:delivery-app'
-
-project(':packages:shared-types').projectDir = new File('packages/shared-types')
-project(':apps:customer-app').projectDir = new File('apps/customer-app')
-project(':apps:driver-app').projectDir = new File('apps/driver-app')
-project(':apps:merchant-app').projectDir = new File('apps/merchant-app')
-project(':apps:hotel-reception-app').projectDir = new File('apps/hotel-reception-app')
-project(':apps:delivery-app').projectDir = new File('apps/delivery-app')
