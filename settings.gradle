@@ -8,10 +8,16 @@ pluginManagement {
 dependencyResolutionManagement {
     repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
     repositories {
+        // 1. Google First (Most stable for Android)
         google()
-        // Adding Maven Central with a mirror fallback
-        mavenCentral()
-        maven { url 'https://maven.google.com' }
+        
+        // 2. Maven Central Mirror (Alternate URL to bypass the 403 block)
+        maven { url "https://repo1.maven.org/maven2/" }
+        
+        // 3. AWS Maven Central Mirror (Very fast and rarely blocked)
+        maven { url "https://plugins-artifacts.pkgs.visualstudio.com/google-maven-central/_packaging/google-maven-central/maven/v2/" }
+        
+        // 4. JitPack for secondary libraries
         maven { url 'https://jitpack.io' }
     }
 }
