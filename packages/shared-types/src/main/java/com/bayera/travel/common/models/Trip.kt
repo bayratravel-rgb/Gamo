@@ -10,7 +10,6 @@ data class Trip(
     val price: Double = 0.0,
     val status: TripStatus = TripStatus.REQUESTED,
     val paymentMethod: String = "CASH",
-    val paymentStatus: String = "PENDING",
     val notes: String = ""
 )
 
