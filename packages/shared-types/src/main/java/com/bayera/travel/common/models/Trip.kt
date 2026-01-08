@@ -4,6 +4,7 @@ data class Trip(
     val customerPhone: String = "",
     val driverId: String? = null,
     val driverName: String? = null,
+    val vehicleType: String = "COMFORT",
     val pickupLocation: Location = Location(),
     val dropoffLocation: Location = Location(),
     val price: Double = 0.0,
