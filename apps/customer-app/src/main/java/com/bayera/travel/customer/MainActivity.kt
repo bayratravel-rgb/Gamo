@@ -13,12 +13,9 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.*
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.*
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.LifecycleEventObserver
 import org.osmdroid.config.Configuration
 import org.osmdroid.tileprovider.tilesource.XYTileSource
 import org.osmdroid.util.GeoPoint
@@ -27,127 +24,77 @@ import com.google.firebase.FirebaseApp
 import com.google.firebase.FirebaseOptions
 import com.google.firebase.database.*
 import com.bayera.travel.common.models.*
-import java.io.*
 import java.util.UUID
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        
-        // 🛡️ CRASH PROTECTOR (Big Brother's Safety Net)
-        Thread.setDefaultUncaughtExceptionHandler { _, e ->
-            val sw = StringWriter(); e.printStackTrace(PrintWriter(sw))
-            val intent = Intent(this, MainActivity::class.java).apply {
-                putExtra("fatal_log", sw.toString()); addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            }
-            startActivity(intent); android.os.Process.killProcess(android.os.Process.myPid())
-        }
-
-        if (intent.getStringExtra("fatal_log") != null) {
-            setContent { ErrorUI(intent.getStringExtra("fatal_log")!!) }; return
-        }
-
-        // 🔑 MANUAL FIREBASE INIT (Proven to work)
         try {
-            if (FirebaseApp.getApps(this).isEmpty()) {
-                val options = FirebaseOptions.Builder()
-                    .setApplicationId("1:643765664968:android:801ade1a7ec854095af9fd")
-                    .setApiKey("AIzaSyCuzSPe6f4JoQYuYS-JskaHT11jKNEuA20")
-                    .setDatabaseUrl("https://bayera-travel-default-rtdb.europe-west1.firebasedatabase.app")
-                    .setProjectId("bayera-travel")
-                    .build()
-                FirebaseApp.initializeApp(this, options)
-            }
+            val options = FirebaseOptions.Builder()
+                .setApplicationId("1:643765664968:android:801ade1a7ec854095af9fd")
+                .setApiKey("AIzaSyCuzSPe6f4JoQYuYS-JskaHT11jKNEuA20")
+                .setDatabaseUrl("https://bayera-travel-default-rtdb.europe-west1.firebasedatabase.app")
+                .setProjectId("bayera-travel").build()
+            if (FirebaseApp.getApps(this).isEmpty()) FirebaseApp.initializeApp(this, options)
         } catch (e: Exception) {}
-
-        // 🧭 OSMDROID CONFIG (Crucial for tile downloading)
-        Configuration.getInstance().userAgentValue = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36"
-        
-        setContent { MaterialTheme { CustomerMasterUI() } }
+        Configuration.getInstance().userAgentValue = "BayeraTravel"
+        setContent { MaterialTheme { CustomerSuperApp() } }
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun CustomerMasterUI() {
-    val db = FirebaseDatabase.getInstance().getReference("trips")
+fun CustomerSuperApp() {
+    var screen by remember { mutableStateOf("home") }
     var activeTrip by remember { mutableStateOf<Trip?>(null) }
-    val userPhone = "user_yy"
+    val db = FirebaseDatabase.getInstance().getReference("trips")
 
     LaunchedEffect(Unit) {
         db.addValueEventListener(object : ValueEventListener {
             override fun onDataChange(s: DataSnapshot) {
                 activeTrip = s.children.mapNotNull { it.getValue(Trip::class.java) }
-                    .firstOrNull { it.customerPhone == userPhone && it.status != TripStatus.COMPLETED }
+                    .firstOrNull { it.customerPhone == "user_bb" && it.status != TripStatus.COMPLETED }
+                if (activeTrip != null) screen = "status"
             }
             override fun onCancelled(e: DatabaseError) {}
         })
     }
 
-    Box(modifier = Modifier.fillMaxSize()) {
-        val context = LocalContext.current
-        val lifecycleOwner = LocalLifecycleOwner.current
-
-        // 🌍 HIGH DETAIL GOOGLE TILES (Roadmap view from screenshot 2)
-        val googleTiles = remember { XYTileSource(
-            "GoogleRoads", 1, 20, 256, ".png",
-            arrayOf("https://mt0.google.com/vt/lyrs=m&x=", "https://mt1.google.com/vt/lyrs=m&x=", "https://mt2.google.com/vt/lyrs=m&x="),
-            "© Google"
-        )}
-
-        val mapView = remember { MapView(context).apply { 
-            setTileSource(googleTiles)
-            setMultiTouchControls(true)
-            controller.setZoom(17.0)
-            controller.setCenter(GeoPoint(6.0206, 37.5534)) // Arba Minch Landmarks
-        } }
-
-        // Managing Map Lifecycle (Required for rendering)
-        DisposableEffect(lifecycleOwner) {
-            val observer = LifecycleEventObserver { _, event ->
-                when (event) {
-                    Lifecycle.Event.ON_RESUME -> mapView.onResume()
-                    Lifecycle.Event.ON_PAUSE -> mapView.onPause()
-                    else -> {}
+    Scaffold(
+        bottomBar = {
+            if (activeTrip == null) {
+                NavigationBar(containerColor = Color.White) {
+                    NavigationBarItem(icon = { Icon(Icons.Default.Home, null) }, label = { Text("Home") }, selected = screen == "home", onClick = { screen = "home" })
+                    NavigationBarItem(icon = { Icon(Icons.Default.History, null) }, label = { Text("Activity") }, selected = false, onClick = {})
+                    NavigationBarItem(icon = { Icon(Icons.Default.Person, null) }, label = { Text("Account") }, selected = false, onClick = {})
                 }
             }
-            lifecycleOwner.lifecycle.addObserver(observer)
-            onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
         }
+    ) { p ->
+        Box(modifier = Modifier.padding(p)) {
+            if (screen == "home") DashboardUI { screen = "map" }
+            else if (screen == "map") MapUI { screen = "home" }
+            else activeTrip?.let { StatusUI(it) }
+        }
+    }
+}
 
-        AndroidView(factory = { mapView }, modifier = Modifier.fillMaxSize())
-
-        // --- 💳 OVERLAY UI ---
-        if (activeTrip == null) {
-            Box(modifier = Modifier.fillMaxSize()) {
-                Icon(Icons.Default.LocationOn, null, modifier = Modifier.align(Alignment.Center).size(45.dp).offset(y = (-22).dp), tint = Color(0xFF2E7D32))
-                Button(
-                    onClick = {
-                        val id = UUID.randomUUID().toString()
-                        db.child(id).setValue(Trip(tripId = id, customerPhone = userPhone, status = TripStatus.REQUESTED, price = 110.0))
-                    },
-                    modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(24.dp).height(56.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF673AB7)),
-                    shape = RoundedCornerShape(28.dp)
-                ) { Text("Set Pickup", fontWeight = FontWeight.Bold) }
-            }
-        } else {
-            Column(
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .fillMaxWidth()
-                    .background(Color.White.copy(alpha = 0.98f), RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp))
-                    .padding(24.dp), 
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Text("FINDING DRIVER", color = Color.Red, fontWeight = FontWeight.Black, style = MaterialTheme.typography.headlineMedium)
-                Text("Fare: ${activeTrip!!.price} ETB", fontWeight = FontWeight.Bold)
-                Spacer(modifier = Modifier.height(12.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.CheckCircle, null, tint = Color(0xFF2E7D32), modifier = Modifier.size(24.dp))
-                    Text(" PAID", color = Color(0xFF2E7D32), fontWeight = FontWeight.Bold, fontSize = 18.sp)
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun DashboardUI(onRide: () -> Unit) {
+    Column(modifier = Modifier.fillMaxSize().padding(20.dp)) {
+        Text("Bayera Travel", style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold)
+        Text("Hi, bb!", style = MaterialTheme.typography.titleLarge)
+        Spacer(modifier = Modifier.height(32.dp))
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+            Card(onClick = onRide, modifier = Modifier.weight(1f).height(130.dp), colors = CardDefaults.cardColors(containerColor = Color(0xFFE3F2FD))) {
+                Column(modifier = Modifier.fillMaxSize(), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
+                    Icon(Icons.Default.DirectionsCar, null, tint = Color(0xFF1976D2)); Text("Ride", fontWeight = FontWeight.Bold)
                 }
-                TextButton(onClick = { db.child(activeTrip!!.tripId).removeValue() }, modifier = Modifier.padding(top = 16.dp)) {
-                    Text("Cancel and Return to Map", color = Color.Gray)
+            }
+            Card(onClick = {}, modifier = Modifier.weight(1f).height(130.dp), colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF3E0))) {
+                Column(modifier = Modifier.fillMaxSize(), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
+                    Icon(Icons.Default.ShoppingCart, null, tint = Color(0xFFF57C00)); Text("Shopping", fontWeight = FontWeight.Bold)
                 }
             }
         }
@@ -155,9 +102,20 @@ fun CustomerMasterUI() {
 }
 
 @Composable
-fun ErrorUI(log: String) {
-    Column(modifier = Modifier.fillMaxSize().background(Color.Black).verticalScroll(rememberScrollState()).padding(16.dp)) {
-        Text("⚠️ SYSTEM ERROR", color = Color.Red, fontWeight = FontWeight.Bold)
-        Text(log, color = Color.Yellow, style = MaterialTheme.typography.bodySmall)
+fun MapUI(onBack: () -> Unit) {
+    val googleTiles = XYTileSource("Google", 1, 20, 256, ".png", arrayOf("https://mt0.google.com/vt/lyrs=m&x="))
+    Box(modifier = Modifier.fillMaxSize()) {
+        AndroidView(factory = { ctx -> MapView(ctx).apply { setTileSource(googleTiles); controller.setZoom(16.0); controller.setCenter(GeoPoint(6.02, 37.55)) } }, modifier = Modifier.fillMaxSize())
+        IconButton(onClick = onBack, modifier = Modifier.padding(16.dp).background(Color.White, RoundedCornerShape(8.dp))) { Icon(Icons.Default.ArrowBack, null) }
+        Button(onClick = {}, modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(24.dp).height(56.dp), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2E7D32)), shape = RoundedCornerShape(28.dp)) { Text("Set Pickup Here", fontWeight = FontWeight.Bold) }
+    }
+}
+
+@Composable
+fun StatusUI(trip: Trip) {
+    Column(modifier = Modifier.fillMaxSize().padding(32.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+        Text("FINDING DRIVER", color = Color.Red, fontWeight = FontWeight.Black, style = MaterialTheme.typography.headlineLarge)
+        Text("Fare: ${trip.price} ETB", fontWeight = FontWeight.Bold)
+        Card(colors = CardDefaults.cardColors(containerColor = Color(0xFFE8F5E9))) { Text("✅ PAID", color = Color(0xFF2E7D32), modifier = Modifier.padding(8.dp)) }
     }
 }

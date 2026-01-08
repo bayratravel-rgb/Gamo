@@ -1,5 +1,4 @@
 package com.bayera.travel.common.models
-
 data class Trip(
     val tripId: String = "",
     val customerPhone: String = "",
@@ -8,11 +7,10 @@ data class Trip(
     val vehicleType: String = "COMFORT",
     val pickupLocation: Location = Location(),
     val dropoffLocation: Location = Location(),
-    val status: TripStatus = TripStatus.REQUESTED,
     val price: Double = 0.0,
+    val status: TripStatus = TripStatus.REQUESTED,
     val paymentMethod: String = "CASH",
     val notes: String = ""
 )
-
 data class Location(val lat: Double = 0.0, val lng: Double = 0.0, val address: String = "")
 enum class TripStatus { REQUESTED, ACCEPTED, IN_PROGRESS, COMPLETED, CANCELLED }
