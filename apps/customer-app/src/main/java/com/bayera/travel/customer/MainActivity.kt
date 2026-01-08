@@ -24,6 +24,7 @@ import org.osmdroid.tileprovider.tilesource.TileSourceFactory
 import org.osmdroid.util.GeoPoint
 import org.osmdroid.views.MapView
 import com.google.firebase.FirebaseApp
+import com.google.firebase.FirebaseOptions
 import com.google.firebase.database.*
 import com.bayera.travel.common.models.*
 import java.util.UUID
@@ -32,16 +33,20 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         Configuration.getInstance().userAgentValue = "BayeraTravel"
-        try { FirebaseApp.initializeApp(this) } catch (e: Exception) {}
+        try {
+            val options = FirebaseOptions.Builder()
+                .setApplicationId("1:643765664968:android:801ade1a7ec854095af9fd")
+                .setApiKey("AIzaSyCuzSPe6f4JoQYuYS-JskaHT11jKNEuA20")
+                .setDatabaseUrl("https://bayera-travel-default-rtdb.europe-west1.firebasedatabase.app")
+                .setProjectId("bayera-travel").build()
+            if (FirebaseApp.getApps(this).isEmpty()) FirebaseApp.initializeApp(this, options)
+        } catch (e: Exception) {}
         setContent { 
             val nav = rememberNavController()
             MaterialTheme {
                 NavHost(navController = nav, startDestination = "dash") {
                     composable("dash") { DashboardUI(nav) }
                     composable("ride") { RideFlowUI(nav) }
-                    composable("payment/{tripId}/{price}") { b -> 
-                        PaymentScreen(nav, b.arguments?.getString("tripId") ?: "", b.arguments?.getString("price") ?: "0") 
-                    }
                 }
             }
         }
@@ -55,12 +60,22 @@ fun DashboardUI(nav: NavController) {
         Text("Hi, yy!", style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold)
         Text("Services", color = Color.Gray, modifier = Modifier.padding(vertical = 12.dp))
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-            ServiceTile("Ride", Icons.Default.DirectionsCar, Color(0xFFE3F2FD), Color(0xFF1976D2)) { nav.navigate("ride") }
-            ServiceTile("Shopping", Icons.Default.ShoppingCart, Color(0xFFFFF3E0), Color(0xFFF57C00)) {}
+            Card(onClick = { nav.navigate("ride") }, modifier = Modifier.weight(1f).height(140.dp), colors = CardDefaults.cardColors(containerColor = Color(0xFFE3F2FD))) {
+                Column(modifier = Modifier.fillMaxSize(), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
+                    Icon(Icons.Default.DirectionsCar, null, tint = Color(0xFF1976D2), modifier = Modifier.size(40.dp))
+                    Text("Ride", fontWeight = FontWeight.Bold)
+                }
+            }
+            Card(onClick = {}, modifier = Modifier.weight(1f).height(140.dp), colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF3E0))) {
+                Column(modifier = Modifier.fillMaxSize(), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
+                    Icon(Icons.Default.ShoppingCart, null, tint = Color(0xFFF57C00), modifier = Modifier.size(40.dp))
+                    Text("Shopping", fontWeight = FontWeight.Bold)
+                }
+            }
         }
         Spacer(modifier = Modifier.height(16.dp))
         Card(modifier = Modifier.fillMaxWidth().height(100.dp), colors = CardDefaults.cardColors(containerColor = Color(0xFFF3E5F5))) {
-            Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+            Row(modifier = Modifier.fillMaxSize().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Default.Hotel, null, tint = Color(0xFF7B1FA2), modifier = Modifier.size(32.dp))
                 Column(modifier = Modifier.padding(start = 16.dp)) { Text("Hotels & Resorts", fontWeight = FontWeight.Bold); Text("Book your stay", fontSize = 12.sp) }
             }
@@ -68,19 +83,10 @@ fun DashboardUI(nav: NavController) {
     }
 }
 
-@Composable
-fun ServiceTile(title: String, icon: androidx.compose.ui.graphics.vector.ImageVector, bg: Color, iconColor: Color, onClick: () -> Unit) {
-    Card(onClick = onClick, modifier = Modifier.height(140.dp).width(160.dp), colors = CardDefaults.cardColors(containerColor = bg)) {
-        Column(modifier = Modifier.fillMaxSize(), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
-            Icon(icon, null, modifier = Modifier.size(40.dp), tint = iconColor)
-            Text(title, fontWeight = FontWeight.Bold)
-        }
-    }
-}
-
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun RideFlowUI(nav: NavController) {
-    var mode by remember { mutableStateOf("MAP") } // MAP -> SUMMARY -> STATUS
+    var mode by remember { mutableStateOf("MAP") } 
     var activeTrip by remember { mutableStateOf<Trip?>(null) }
     val db = FirebaseDatabase.getInstance().getReference("trips")
 
@@ -113,32 +119,20 @@ fun RideFlowUI(nav: NavController) {
                     Button(onClick = { 
                         val id = UUID.randomUUID().toString()
                         db.child(id).setValue(Trip(tripId = id, customerPhone = "user_yy", price = 110.0, status = TripStatus.REQUESTED))
-                        nav.navigate("payment/$id/110")
-                    }, modifier = Modifier.fillMaxWidth().padding(top=16.dp).height(50.dp), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFFD600))) { Text("BOOK RIDE", color = Color.Black) }
+                    }, modifier = Modifier.fillMaxWidth().padding(top=16.dp).height(50.dp), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFFD600))) { Text("BOOK RIDE", color = Color.Black, fontWeight = FontWeight.Bold) }
                 }
             }
         } else if (mode == "STATUS") {
             activeTrip?.let { 
                 Card(modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(16.dp)) {
                     Column(modifier = Modifier.padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("✅ Driver Found!", color = Color(0xFF2E7D32), fontWeight = FontWeight.Bold, fontSize = 24.sp)
-                        Text("Driver: ${it.driverName ?: "Partner"}")
-                        if (it.status == TripStatus.IN_PROGRESS) Text("LOCKED: EN ROUTE", color = Color.Red, fontWeight = FontWeight.Black)
+                        Text("FINDING DRIVER", color = Color.Red, fontWeight = FontWeight.Black, style = MaterialTheme.typography.headlineMedium)
+                        Text("Driver: ${it.driverName ?: "Partner"}", style = MaterialTheme.typography.titleMedium)
+                        Text("Fare: ${it.price} ETB", fontWeight = FontWeight.Bold)
+                        Box(modifier = Modifier.padding(top=12.dp).background(Color(0xFFE8F5E9)).padding(8.dp)) { Text("✅ PAID", color = Color(0xFF2E7D32), fontWeight = FontWeight.Bold) }
                     }
                 }
             }
         }
-    }
-}
-
-@Composable
-fun PaymentScreen(nav: NavController, tripId: String, price: String) {
-    Column(modifier = Modifier.fillMaxSize().background(Color.White).padding(32.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
-        Icon(Icons.Default.CreditCard, null, tint = Color(0xFF2E7D32), modifier = Modifier.size(64.dp))
-        Text("Pay for Ride", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
-        Text("$price.0 ETB", fontSize = 48.sp, color = Color(0xFF2E7D32), fontWeight = FontWeight.Bold)
-        Spacer(modifier = Modifier.height(32.dp))
-        Button(onClick = { /* Chapa Call */ }, modifier = Modifier.fillMaxWidth().height(56.dp), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF673AB7))) { Text("Pay Now") }
-        TextButton(onClick = { nav.popBackStack() }) { Text("Pay Cash to Driver", color = Color(0xFF673AB7)) }
     }
 }
