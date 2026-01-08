@@ -1,6 +1,6 @@
 package com.bayera.travel.customer
 
-import android.os.*
+import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.*
@@ -77,11 +77,15 @@ fun DashboardUI(nav: NavController) {
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun RideBookingUI(nav: NavController) {
     val db = FirebaseDatabase.getInstance().getReference("trips")
+    var mode by remember { mutableStateOf("PICKUP") } // PICKUP, DEST, SUMMARY
     var activeTrip by remember { mutableStateOf<Trip?>(null) }
-    
+    var note by remember { mutableStateOf("") }
+    val mapState = remember { mutableStateOf<MapView?>(null) }
+
     LaunchedEffect(Unit) {
         db.addValueEventListener(object : ValueEventListener {
             override fun onDataChange(s: DataSnapshot) {
@@ -93,24 +97,37 @@ fun RideBookingUI(nav: NavController) {
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
-        AndroidView(factory = { ctx -> MapView(ctx).apply { setTileSource(TileSourceFactory.MAPNIK); controller.setZoom(16.0); controller.setCenter(GeoPoint(6.022, 37.559)) } }, modifier = Modifier.fillMaxSize())
+        AndroidView(factory = { ctx -> MapView(ctx).apply { setTileSource(TileSourceFactory.MAPNIK); controller.setZoom(16.0); controller.setCenter(GeoPoint(6.022, 37.559)); mapState.value = this } }, modifier = Modifier.fillMaxSize())
         
-        IconButton(onClick = { nav.popBackStack() }, modifier = Modifier.padding(16.dp).background(Color.White, CircleShape)) { Icon(Icons.Default.ArrowBack, null) }
-        
-        Icon(Icons.Default.LocationOn, null, modifier = Modifier.align(Alignment.Center).size(45.dp).offset(y = (-22).dp), tint = Color(0xFF2E7D32))
-
         if (activeTrip == null) {
-            Button(onClick = { 
-                val id = UUID.randomUUID().toString()
-                db.child(id).setValue(Trip(tripId = id, customerPhone = "user_bb", dropoffLocation = Location(address = "Arba Minch Center"), status = TripStatus.REQUESTED, price = 110.0))
-            }, modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(24.dp).height(56.dp), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2E7D32)), shape = RoundedCornerShape(28.dp)) { Text("Set Pickup Here") }
+            Icon(Icons.Default.LocationOn, null, modifier = Modifier.align(Alignment.Center).size(45.dp).offset(y = (-22).dp), tint = if(mode=="PICKUP") Color(0xFF2E7D32) else Color.Red)
+            
+            Card(modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(16.dp), shape = RoundedCornerShape(24.dp)) {
+                Column(modifier = Modifier.padding(20.dp)) {
+                    if (mode == "PICKUP") {
+                        Text("Start Trip From?", color = Color.Gray); Text("Arba Minch Center", fontWeight = FontWeight.Bold)
+                        Button(onClick = { mode = "DEST" }, modifier = Modifier.fillMaxWidth().padding(top=12.dp), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2E7D32))) { Text("Set Pickup Here") }
+                    } else if (mode == "DEST") {
+                        Text("Where to?", color = Color.Gray); Text("Select Destination", fontWeight = FontWeight.Bold)
+                        Button(onClick = { mode = "SUMMARY" }, modifier = Modifier.fillMaxWidth().padding(top=12.dp), colors = ButtonDefaults.buttonColors(containerColor = Color.Red)) { Text("Set Destination Here") }
+                    } else {
+                        OutlinedTextField(value = note, onValueChange = { note = it }, label = { Text("Notes for Driver (Accuracy)") }, modifier = Modifier.fillMaxWidth())
+                        Button(onClick = {
+                            val id = UUID.randomUUID().toString()
+                            db.child(id).setValue(Trip(tripId = id, customerPhone = "user_bb", dropoffLocation = Location(address = "Destination"), notes = note, price = 110.0))
+                        }, modifier = Modifier.fillMaxWidth().padding(top=12.dp), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFFD600))) { Text("BOOK RIDE • 110 ETB", color = Color.Black) }
+                    }
+                }
+            }
         } else {
             Card(modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(16.dp)) {
                 Column(modifier = Modifier.padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(if(activeTrip!!.status == TripStatus.IN_PROGRESS) "EN ROUTE" else "FINDING DRIVER", color = Color.Red, fontWeight = FontWeight.Black)
+                    Text(if(activeTrip!!.status == TripStatus.IN_PROGRESS) "EN ROUTE" else "FINDING DRIVER", color = Color.Red, fontWeight = FontWeight.Black, style = MaterialTheme.typography.headlineSmall)
+                    Text("Driver: ${activeTrip!!.driverName ?: "Partner"}")
                     Text("Fare: ${activeTrip!!.price} ETB")
                 }
             }
         }
+        IconButton(onClick = { nav.popBackStack() }, modifier = Modifier.padding(16.dp).background(Color.White, CircleShape)) { Icon(Icons.Default.ArrowBack, null) }
     }
 }
