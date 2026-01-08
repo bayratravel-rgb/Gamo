@@ -1,41 +1,40 @@
 package com.bayera.travel.driver
 
+import android.content.Context
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.ui.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.*
+import androidx.compose.ui.unit.dp
+import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.composable
+import androidx.navigation.compose.rememberNavController
 import com.google.firebase.FirebaseApp
-import com.google.firebase.FirebaseOptions
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        
-        try {
-            if (FirebaseApp.getApps(this).isEmpty()) {
-                val options = FirebaseOptions.Builder()
-                    .setApplicationId("1:643765664968:android:656f004fce2ecda85af9fd")
-                    .setApiKey("AIzaSyCuzSPe6f4JoQYuYS-JskaHT11jKNEuA20")
-                    .setDatabaseUrl("https://bayera-travel-default-rtdb.europe-west1.firebasedatabase.app")
-                    .setProjectId("bayera-travel")
-                    .build()
-                FirebaseApp.initializeApp(this, options)
-            }
-        } catch (e: Exception) {}
-
+        try { FirebaseApp.initializeApp(this) } catch (e: Exception) {}
         setContent {
+            val navController = rememberNavController()
+            val context = LocalContext.current
+            val prefs = context.getSharedPreferences("driver_prefs", Context.MODE_PRIVATE)
+            
             MaterialTheme {
-                Surface(modifier = Modifier.fillMaxSize(), color = Color(0xFFF7F8FA)) {
-                    DriverDashboardUI()
+                val startScreen = if (prefs.getString("name", "").isNullOrEmpty()) "login" else "dashboard"
+                NavHost(navController = navController, startDestination = startScreen) {
+                    composable("login") { Text("Driver Login") }
+                    composable("dashboard") { DriverDashboard() }
                 }
             }
         }
@@ -43,19 +42,10 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-fun DriverDashboardUI() {
+fun DriverDashboard() {
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
-        Text("Bayera Partner", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.ExtraBold)
-        Spacer(modifier = Modifier.height(24.dp))
-        Card(
-            modifier = Modifier.fillMaxWidth().height(180.dp),
-            colors = CardDefaults.cardColors(containerColor = Color(0xFF2E7D32)),
-            shape = RoundedCornerShape(24.dp)
-        ) {
-            Column(modifier = Modifier.fillMaxSize(), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
-                Text("Total Earnings", color = Color.White.copy(alpha = 0.8f))
-                Text("500.0 ETB", color = Color.White, fontSize = 42.sp, fontWeight = FontWeight.Bold)
-            }
-        }
+        Text("Partner Dashboard", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+        Spacer(modifier = Modifier.height(20.dp))
+        Text("Waiting for requests...")
     }
 }
