@@ -1,7 +1,6 @@
 package com.bayera.travel.customer
 
-import android.content.*
-import android.os.*
+import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.*
@@ -13,11 +12,14 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.*
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import com.google.firebase.FirebaseApp
+import androidx.compose.ui.unit.*
+import org.osmdroid.config.Configuration
+import org.osmdroid.tileprovider.tilesource.TileSourceFactory
+import org.osmdroid.util.GeoPoint
+import org.osmdroid.views.MapView
 import com.google.firebase.database.*
 import com.bayera.travel.common.models.*
 import java.util.UUID
@@ -25,29 +27,23 @@ import java.util.UUID
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        try { FirebaseApp.initializeApp(this) } catch (e: Exception) {}
+        Configuration.getInstance().userAgentValue = packageName
         setContent { MaterialTheme { CustomerSuperApp() } }
     }
 }
 
 @Composable
 fun CustomerSuperApp() {
-    var currentScreen by remember { mutableStateOf("home") }
+    var screen by remember { mutableStateOf("home") }
     var activeTrip by remember { mutableStateOf<Trip?>(null) }
-    val userPhone = "user_bb" 
     val db = FirebaseDatabase.getInstance().getReference("trips")
 
     LaunchedEffect(Unit) {
         db.addValueEventListener(object : ValueEventListener {
             override fun onDataChange(s: DataSnapshot) {
-                var found: Trip? = null
-                for (child in s.children) {
-                    val t = child.getValue(Trip::class.java)
-                    if (t != null && t.customerPhone == userPhone && t.status != TripStatus.COMPLETED) found = t
-                }
-                activeTrip = found
-                if (activeTrip != null) currentScreen = "status"
-                else if (currentScreen == "status") currentScreen = "home"
+                activeTrip = s.children.mapNotNull { it.getValue(Trip::class.java) }
+                    .firstOrNull { it.customerPhone == "user_bb" && it.status != TripStatus.COMPLETED }
+                if (activeTrip != null) screen = "status"
             }
             override fun onCancelled(e: DatabaseError) {}
         })
@@ -57,61 +53,71 @@ fun CustomerSuperApp() {
         bottomBar = {
             if (activeTrip == null) {
                 NavigationBar(containerColor = Color.White) {
-                    NavigationBarItem(icon = { Icon(Icons.Default.Home, null) }, label = { Text("Home") }, selected = currentScreen == "home", onClick = { currentScreen = "home" })
-                    NavigationBarItem(icon = { Icon(Icons.Default.History, null) }, label = { Text("Activity") }, selected = currentScreen == "activity", onClick = { currentScreen = "activity" })
-                    NavigationBarItem(icon = { Icon(Icons.Default.Person, null) }, label = { Text("Account") }, selected = currentScreen == "account", onClick = { currentScreen = "account" })
+                    NavigationBarItem(icon = { Icon(Icons.Default.Home, null) }, label = { Text("Home") }, selected = screen == "home", onClick = { screen = "home" })
+                    NavigationBarItem(icon = { Icon(Icons.Default.History, null) }, label = { Text("Activity") }, selected = false, onClick = {})
+                    NavigationBarItem(icon = { Icon(Icons.Default.AccountCircle, null) }, label = { Text("Account") }, selected = false, onClick = {})
                 }
             }
         }
     ) { p ->
         Box(modifier = Modifier.padding(p)) {
-            when (currentScreen) {
-                "home" -> SuperDashboardUI { currentScreen = "map" }
-                "map" -> MapBookingUI(userPhone) { currentScreen = "home" }
-                "status" -> activeTrip?.let { TripStatusLockedUI(it) }
+            when (screen) {
+                "home" -> DashboardUI { screen = "map" }
+                "map" -> MapBookingUI { screen = "home" }
+                "status" -> activeTrip?.let { StatusLockedUI(it) }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun DashboardUI(onRideClick: () -> Unit) {
+    Column(modifier = Modifier.fillMaxSize().padding(20.dp).verticalScroll(rememberScrollState())) {
+        Text("Hi, bb!", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+        Text("Services", color = Color.Gray, modifier = Modifier.padding(vertical = 16.dp))
+        
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+            Card(onClick = onRideClick, modifier = Modifier.weight(1f).height(120.dp), colors = CardDefaults.cardColors(containerColor = Color(0xFFE3F2FD))) {
+                Column(modifier = Modifier.fillMaxSize(), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
+                    Icon(Icons.Default.DirectionsCar, null, tint = Color(0xFF1976D2)); Text("Ride", fontWeight = FontWeight.Bold)
+                }
+            }
+            Card(modifier = Modifier.weight(1f).height(120.dp), colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF3E0))) {
+                Column(modifier = Modifier.fillMaxSize(), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
+                    Icon(Icons.Default.ShoppingCart, null, tint = Color(0xFFF57C00)); Text("Shopping", fontWeight = FontWeight.Bold)
+                }
+            }
+        }
+        Spacer(modifier = Modifier.height(16.dp))
+        Card(modifier = Modifier.fillMaxWidth().height(100.dp), colors = CardDefaults.cardColors(containerColor = Color(0xFFF3E5F5))) {
+            Row(modifier = Modifier.fillMaxSize().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Default.Hotel, null, tint = Color(0xFF7B1FA2))
+                Spacer(modifier = Modifier.width(16.dp))
+                Column { Text("Hotels & Resorts", fontWeight = FontWeight.Bold); Text("Book your stay", fontSize = 12.sp) }
             }
         }
     }
 }
 
 @Composable
-fun SuperDashboardUI(onRideClick: () -> Unit) {
-    Column(modifier = Modifier.fillMaxSize().padding(20.dp)) {
-        Text("Hi, bb!", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
-        Text("Services", color = Color.Gray, modifier = Modifier.padding(vertical = 16.dp))
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-            ServiceCard("Ride", Icons.Default.DirectionsCar, Color(0xFFE3F2FD), Modifier.weight(1f), onRideClick)
-            ServiceCard("Shopping", Icons.Default.ShoppingCart, Color(0xFFFFF3E0), Modifier.weight(1f)) {}
-        }
-        Spacer(modifier = Modifier.height(16.dp))
-        ServiceCard("Hotels & Resorts", Icons.Default.Hotel, Color(0xFFF3E5F5), Modifier.fillMaxWidth()) {}
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun ServiceCard(title: String, icon: ImageVector, bg: Color, modifier: Modifier, onClick: () -> Unit = {}) {
-    Card(onClick = onClick, modifier = modifier.height(120.dp), colors = CardDefaults.cardColors(containerColor = bg)) {
-        Column(modifier = Modifier.fillMaxSize(), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
-            Icon(icon, null, modifier = Modifier.size(32.dp), tint = Color(0xFF1976D2))
-            Text(title, fontWeight = FontWeight.Bold)
-        }
-    }
-}
-
-@Composable
-fun MapBookingUI(phone: String, onBack: () -> Unit) {
+fun MapBookingUI(onBack: () -> Unit) {
     Box(modifier = Modifier.fillMaxSize()) {
-        Box(modifier = Modifier.fillMaxSize().background(Color(0xFFEEEEEE))) {
-            Text("📍 Arba Minch Map View", modifier = Modifier.align(Alignment.Center))
-            IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, null) }
+        // REAL OSMDROID MAP VIEW
+        AndroidView(factory = { ctx ->
+            MapView(ctx).apply {
+                setTileSource(TileSourceFactory.MAPNIK)
+                controller.setZoom(15.0)
+                controller.setCenter(GeoPoint(6.01, 37.55)) // Arba Minch Center
+            }
+        }, modifier = Modifier.fillMaxSize())
+
+        IconButton(onClick = onBack, modifier = Modifier.padding(16.dp).background(Color.White, RoundedCornerShape(8.dp))) {
+            Icon(Icons.Default.ArrowBack, null)
         }
+
         Button(
-            onClick = {
-                val id = UUID.randomUUID().toString()
-                FirebaseDatabase.getInstance().getReference("trips").child(id)
-                    .setValue(Trip(tripId = id, customerPhone = phone, dropoffLocation = Location(address = "Arba Minch"), status = TripStatus.REQUESTED))
-            },
+            onClick = { /* Firebase Request logic here */ },
             modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(24.dp).height(56.dp),
             colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2E7D32)),
             shape = RoundedCornerShape(28.dp)
@@ -120,13 +126,16 @@ fun MapBookingUI(phone: String, onBack: () -> Unit) {
 }
 
 @Composable
-fun TripStatusLockedUI(trip: Trip) {
+fun StatusLockedUI(trip: Trip) {
     Box(modifier = Modifier.fillMaxSize().background(Color(0xFFF5F5F5))) {
         Column(modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth().background(Color.White, RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp)).padding(32.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-            Text(if(trip.status == TripStatus.IN_PROGRESS) "EN ROUTE" else "DRIVER FOUND", color = Color(0xFF2E7D32), fontWeight = FontWeight.Bold)
-            Text("Driver: ${trip.driverName ?: "Partner"}", style = MaterialTheme.typography.headlineSmall)
-            Spacer(modifier = Modifier.height(8.dp))
-            Box(modifier = Modifier.background(Color(0xFFE8F5E9)).padding(8.dp)) { Text("✅ PAID", color = Color(0xFF2E7D32), fontWeight = FontWeight.Bold) }
+            Icon(Icons.Default.CheckCircle, null, tint = Color(0xFF2E7D32), modifier = Modifier.size(48.dp))
+            Text(" Driver Found!", style = MaterialTheme.typography.headlineSmall, color = Color(0xFF2E7D32), fontWeight = FontWeight.Bold)
+            Text("Driver: ${trip.driverName ?: "Arba Partner"}")
+            if(trip.status == TripStatus.IN_PROGRESS) {
+                Spacer(modifier = Modifier.height(16.dp))
+                Text("EN ROUTE - UI LOCKED", color = Color.Red, fontWeight = FontWeight.Black)
+            }
         }
     }
 }
