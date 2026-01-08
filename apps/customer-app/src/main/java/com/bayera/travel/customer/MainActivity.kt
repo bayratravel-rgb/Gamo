@@ -14,7 +14,6 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.*
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -35,10 +34,9 @@ class MainActivity : ComponentActivity() {
 fun CustomerSuperApp() {
     var currentScreen by remember { mutableStateOf("home") }
     var activeTrip by remember { mutableStateOf<Trip?>(null) }
-    val userPhone = "user_bb" // Based on your screenshot "Hi, bb!"
+    val userPhone = "user_bb" 
     val db = FirebaseDatabase.getInstance().getReference("trips")
 
-    // Real-time monitor for Trip Status (The "Lock")
     LaunchedEffect(Unit) {
         db.addValueEventListener(object : ValueEventListener {
             override fun onDataChange(s: DataSnapshot) {
@@ -49,6 +47,7 @@ fun CustomerSuperApp() {
                 }
                 activeTrip = found
                 if (activeTrip != null) currentScreen = "status"
+                else if (currentScreen == "status") currentScreen = "home"
             }
             override fun onCancelled(e: DatabaseError) {}
         })
@@ -67,103 +66,67 @@ fun CustomerSuperApp() {
     ) { p ->
         Box(modifier = Modifier.padding(p)) {
             when (currentScreen) {
-                "home" -> SuperDashboard { currentScreen = "map" }
-                "map" -> MapBookingScreen(userPhone) { currentScreen = "home" }
+                "home" -> SuperDashboardUI { currentScreen = "map" }
+                "map" -> MapBookingUI(userPhone) { currentScreen = "home" }
                 "status" -> activeTrip?.let { TripStatusLockedUI(it) }
-                else -> Text("Coming Soon")
             }
         }
     }
 }
 
 @Composable
-fun SuperDashboard(onRideClick: () -> Unit) {
+fun SuperDashboardUI(onRideClick: () -> Unit) {
     Column(modifier = Modifier.fillMaxSize().padding(20.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("Hi, bb!", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
-            Spacer(modifier = Modifier.weight(1f))
-            Icon(Icons.Default.Settings, null)
-        }
+        Text("Hi, bb!", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
         Text("Services", color = Color.Gray, modifier = Modifier.padding(vertical = 16.dp))
-        
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-            ServiceTile("Ride", Icons.Default.DirectionsCar, Color(0xFFE3F2FD), Modifier.weight(1f)) { onRideClick() }
-            ServiceTile("Shopping", Icons.Default.ShoppingCart, Color(0xFFFFF3E0), Modifier.weight(1f)) {}
+            ServiceCard("Ride", Icons.Default.DirectionsCar, Color(0xFFE3F2FD), Modifier.weight(1f), onRideClick)
+            ServiceCard("Shopping", Icons.Default.ShoppingCart, Color(0xFFFFF3E0), Modifier.weight(1f)) {}
         }
         Spacer(modifier = Modifier.height(16.dp))
-        ServiceTile("Hotels & Resorts", Icons.Default.Hotel, Color(0xFFF3E5F5), Modifier.fillMaxWidth(), "Book your stay") {}
+        ServiceCard("Hotels & Resorts", Icons.Default.Hotel, Color(0xFFF3E5F5), Modifier.fillMaxWidth()) {}
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ServiceTile(title: String, icon: ImageVector, bg: Color, modifier: Modifier, sub: String? = null, onClick: () -> Unit = {}) {
-    Card(
-        onClick = onClick,
-        modifier = modifier.height(140.dp),
-        colors = CardDefaults.cardColors(containerColor = bg),
-        shape = RoundedCornerShape(16.dp)
-    ) {
-        Column(modifier = Modifier.padding(16.dp).fillMaxSize(), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
-            Icon(icon, null, modifier = Modifier.size(40.dp), tint = Color(0xFF1976D2))
-            Spacer(modifier = Modifier.height(8.dp))
-            Text(title, fontWeight = FontWeight.Bold, fontSize = 18.sp)
-            if (sub != null) Text(sub, fontSize = 12.sp, color = Color.Gray)
+fun ServiceCard(title: String, icon: ImageVector, bg: Color, modifier: Modifier, onClick: () -> Unit = {}) {
+    Card(onClick = onClick, modifier = modifier.height(120.dp), colors = CardDefaults.cardColors(containerColor = bg)) {
+        Column(modifier = Modifier.fillMaxSize(), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
+            Icon(icon, null, modifier = Modifier.size(32.dp), tint = Color(0xFF1976D2))
+            Text(title, fontWeight = FontWeight.Bold)
         }
     }
 }
 
 @Composable
-fun MapBookingScreen(phone: String, onBack: () -> Unit) {
+fun MapBookingUI(phone: String, onBack: () -> Unit) {
     Box(modifier = Modifier.fillMaxSize()) {
-        // Placeholder for the Arba Minch Map from your screenshot
-        Box(modifier = Modifier.fillMaxSize().background(Color(0xFFF5F5F5))) {
-            Text("🗺️ Arba Minch Map View", modifier = Modifier.align(Alignment.Center))
-            IconButton(onClick = onBack, modifier = Modifier.padding(16.dp).background(Color.White, RoundedCornerShape(8.dp))) {
-                Icon(Icons.Default.ArrowBack, null)
-            }
+        Box(modifier = Modifier.fillMaxSize().background(Color(0xFFEEEEEE))) {
+            Text("📍 Arba Minch Map View", modifier = Modifier.align(Alignment.Center))
+            IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, null) }
         }
-        
-        // The Green Button from your screenshot
         Button(
             onClick = {
                 val id = UUID.randomUUID().toString()
                 FirebaseDatabase.getInstance().getReference("trips").child(id)
-                    .setValue(Trip(tripId = id, customerPhone = phone, dropoffLocation = Location(address = "Arba Minch University"), status = TripStatus.REQUESTED))
+                    .setValue(Trip(tripId = id, customerPhone = phone, dropoffLocation = Location(address = "Arba Minch"), status = TripStatus.REQUESTED))
             },
             modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(24.dp).height(56.dp),
             colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2E7D32)),
             shape = RoundedCornerShape(28.dp)
-        ) {
-            Text("Set Pickup Here", fontSize = 18.sp, fontWeight = FontWeight.Bold)
-        }
+        ) { Text("Set Pickup Here", fontSize = 18.sp, fontWeight = FontWeight.Bold) }
     }
 }
 
 @Composable
 fun TripStatusLockedUI(trip: Trip) {
-    // This is the "Driver Found / PAID" screen from your screenshot
-    Box(modifier = Modifier.fillMaxSize().background(Color(0xFFF0F2F5))) {
+    Box(modifier = Modifier.fillMaxSize().background(Color(0xFFF5F5F5))) {
         Column(modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth().background(Color.White, RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp)).padding(32.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-            if (trip.status == TripStatus.REQUESTED) {
-                CircularProgressIndicator(color = Color(0xFF2E7D32))
-                Text("Finding Driver...", modifier = Modifier.padding(top = 16.dp))
-            } else {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.CheckCircle, null, tint = Color(0xFF2E7D32), modifier = Modifier.size(32.dp))
-                    Text(" Driver Found!", style = MaterialTheme.typography.headlineSmall, color = Color(0xFF2E7D32), fontWeight = FontWeight.Bold)
-                }
-                Text("Driver: ${trip.driverName ?: "Arba Partner"}", modifier = Modifier.padding(top = 8.dp))
-                
-                Box(modifier = Modifier.padding(top = 12.dp).background(Color(0xFFE8F5E9), RoundedCornerShape(4.dp)).padding(horizontal = 8.dp, vertical = 4.dp)) {
-                    Text("✅ PAID", color = Color(0xFF2E7D32), fontWeight = FontWeight.Bold)
-                }
-                
-                if (trip.status == TripStatus.IN_PROGRESS) {
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Text("EN ROUTE", fontWeight = FontWeight.ExtraBold, color = Color.Red, fontSize = 24.sp)
-                    Text("Navigation Locked", style = MaterialTheme.typography.labelSmall)
-                }
-            }
+            Text(if(trip.status == TripStatus.IN_PROGRESS) "EN ROUTE" else "DRIVER FOUND", color = Color(0xFF2E7D32), fontWeight = FontWeight.Bold)
+            Text("Driver: ${trip.driverName ?: "Partner"}", style = MaterialTheme.typography.headlineSmall)
+            Spacer(modifier = Modifier.height(8.dp))
+            Box(modifier = Modifier.background(Color(0xFFE8F5E9)).padding(8.dp)) { Text("✅ PAID", color = Color(0xFF2E7D32), fontWeight = FontWeight.Bold) }
         }
     }
 }
