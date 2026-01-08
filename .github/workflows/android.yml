@@ -1,0 +1,46 @@
+name: Master Build (Standard)
+
+on:
+  push:
+    branches: [ "main" ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - name: Set up JDK 17
+      uses: actions/setup-java@v4
+      with:
+        java-version: '17'
+        distribution: 'temurin'
+        cache: gradle
+    - name: Grant execute permission for gradlew
+      run: chmod +x gradlew
+    - name: Build All Apps
+      run: ./gradlew assembleDebug
+    - name: Upload Customer App
+      uses: actions/upload-artifact@v4
+      with:
+        name: CUSTOMER-APP
+        path: apps/customer-app/build/outputs/apk/debug/*.apk
+    - name: Upload Driver App
+      uses: actions/upload-artifact@v4
+      with:
+        name: DRIVER-APP
+        path: apps/driver-app/build/outputs/apk/debug/*.apk
+    - name: Upload Merchant App
+      uses: actions/upload-artifact@v4
+      with:
+        name: MERCHANT-APP
+        path: apps/merchant-app/build/outputs/apk/debug/*.apk
+    - name: Upload Hotel App
+      uses: actions/upload-artifact@v4
+      with:
+        name: HOTEL-APP
+        path: apps/hotel-reception-app/build/outputs/apk/debug/*.apk
+    - name: Upload Delivery App
+      uses: actions/upload-artifact@v4
+      with:
+        name: DELIVERY-APP
+        path: apps/delivery-app/build/outputs/apk/debug/*.apk
