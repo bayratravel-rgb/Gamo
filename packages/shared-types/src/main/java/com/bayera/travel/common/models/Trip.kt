@@ -9,7 +9,6 @@ data class Trip(
     val dropoffLocation: Location = Location(),
     val price: Double = 0.0,
     val status: TripStatus = TripStatus.REQUESTED,
-    val paymentMethod: String = "CASH",
     val notes: String = ""
 )
 data class Location(val lat: Double = 0.0, val lng: Double = 0.0, val address: String = "")
