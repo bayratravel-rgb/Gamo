@@ -14,7 +14,6 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.*
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.google.firebase.FirebaseApp
 import com.google.firebase.database.*
@@ -26,6 +25,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         
+        // --- GLOBAL CRASH HANDLER ---
         Thread.setDefaultUncaughtExceptionHandler { _, e ->
             val sw = StringWriter(); e.printStackTrace(PrintWriter(sw))
             val intent = Intent(this, MainActivity::class.java).apply {
@@ -38,7 +38,12 @@ class MainActivity : ComponentActivity() {
             setContent { ErrorScreen(intent.getStringExtra("error")!!) }; return
         }
 
-        try { FirebaseApp.initializeApp(this) } catch (e: Exception) {}
+        // --- FORCED INITIALIZATION ---
+        try {
+            FirebaseApp.initializeApp(applicationContext)
+        } catch (e: Exception) {
+            // If already initialized, ignore
+        }
 
         setContent { MaterialTheme { CustomerMaster() } }
     }
@@ -48,30 +53,37 @@ class MainActivity : ComponentActivity() {
 fun CustomerMaster() {
     val context = LocalContext.current
     val prefs = context.getSharedPreferences("user_prefs", Context.MODE_PRIVATE)
-    val userPhone = prefs.getString("phone", "user_${UUID.randomUUID().toString().take(4)}") ?: ""
+    val userPhone = prefs.getString("phone", "user_test") ?: "user_test"
     var activeTrip by remember { mutableStateOf<Trip?>(null) }
-    val db = FirebaseDatabase.getInstance().getReference("trips")
-
+    
+    // We delay database access until we are sure we are in a safe state
     LaunchedEffect(Unit) {
-        db.addValueEventListener(object : ValueEventListener {
-            override fun onDataChange(s: DataSnapshot) {
-                var found: Trip? = null
-                for (child in s.children) {
-                    val t = child.getValue(Trip::class.java)
-                    if (t != null && t.customerPhone == userPhone && t.status != TripStatus.COMPLETED) found = t
+        try {
+            val db = FirebaseDatabase.getInstance().getReference("trips")
+            db.addValueEventListener(object : ValueEventListener {
+                override fun onDataChange(s: DataSnapshot) {
+                    var found: Trip? = null
+                    for (child in s.children) {
+                        val t = child.getValue(Trip::class.java)
+                        if (t != null && t.customerPhone == userPhone && t.status != TripStatus.COMPLETED) {
+                            found = t
+                        }
+                    }
+                    activeTrip = found
                 }
-                activeTrip = found
-            }
-            override fun onCancelled(e: DatabaseError) {}
-        })
+                override fun onCancelled(e: DatabaseError) {}
+            })
+        } catch (e: Exception) {
+            // Handle initialization errors
+        }
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
-        Box(modifier = Modifier.fillMaxSize().background(Color(0xFFF0F2F5))) {
-            Text("📍 Arba Minch Map active", modifier = Modifier.align(Alignment.Center))
+        Box(modifier = Modifier.fillMaxSize().background(Color(0xFFE8EAF6))) {
+            Text("📍 Map View Ready", modifier = Modifier.align(Alignment.Center))
         }
         if (activeTrip == null) {
-            Box(modifier = Modifier.fillMaxSize()) { BookingUI(userPhone, db, Modifier.align(Alignment.BottomCenter)) }
+            Box(modifier = Modifier.fillMaxSize()) { BookingUI(userPhone, Modifier.align(Alignment.BottomCenter)) }
         } else {
             Box(modifier = Modifier.fillMaxSize()) { LockedTripUI(activeTrip!!, Modifier.align(Alignment.BottomCenter)) }
         }
@@ -79,46 +91,36 @@ fun CustomerMaster() {
 }
 
 @Composable
-fun BookingUI(phone: String, db: DatabaseReference, modifier: Modifier) {
+fun BookingUI(phone: String, modifier: Modifier) {
     var dest by remember { mutableStateOf("") }
-    var note by remember { mutableStateOf("") }
-    var step by remember { mutableIntStateOf(1) }
-
     Card(modifier = modifier.fillMaxWidth().padding(16.dp), shape = RoundedCornerShape(24.dp)) {
         Column(modifier = Modifier.padding(20.dp)) {
-            Text(if(step==1) "Where to?" else "Note to Driver", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-            if(step==1) {
-                OutlinedTextField(value = dest, onValueChange = { dest = it }, label = { Text("Destination") }, modifier = Modifier.fillMaxWidth())
-                Button(onClick = { step = 2 }, modifier = Modifier.fillMaxWidth().padding(top = 16.dp)) { Text("Next") }
-            } else {
-                OutlinedTextField(value = note, onValueChange = { note = it }, label = { Text("Add Notes (Accuracy)") }, modifier = Modifier.fillMaxWidth())
-                Button(onClick = {
-                    val id = UUID.randomUUID().toString()
-                    db.child(id).setValue(Trip(tripId = id, customerPhone = phone, dropoffLocation = Location(address = dest), notes = note, price = 150.0))
-                }, modifier = Modifier.fillMaxWidth().padding(top = 16.dp)) { Text("Request Ride") }
-            }
+            Text("Where to?", style = MaterialTheme.typography.titleLarge)
+            OutlinedTextField(value = dest, onValueChange = { dest = it }, modifier = Modifier.fillMaxWidth())
+            Button(onClick = {
+                val id = UUID.randomUUID().toString()
+                FirebaseDatabase.getInstance().getReference("trips").child(id)
+                    .setValue(Trip(tripId = id, customerPhone = phone, dropoffLocation = Location(address = dest)))
+            }, modifier = Modifier.fillMaxWidth().padding(top = 16.dp)) { Text("Request Ride") }
         }
     }
 }
 
 @Composable
 fun LockedTripUI(trip: Trip, modifier: Modifier) {
-    Card(modifier = modifier.fillMaxWidth().padding(16.dp), colors = CardDefaults.cardColors(containerColor = if(trip.status == TripStatus.IN_PROGRESS) Color(0xFFFFEBEE) else Color.White)) {
+    Card(modifier = modifier.fillMaxWidth().padding(16.dp)) {
         Column(modifier = Modifier.padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-            if(trip.status == TripStatus.IN_PROGRESS) {
-                Text("LOCKED: TRIP IN PROGRESS", color = Color.Red, fontWeight = FontWeight.ExtraBold)
-            }
-            Text("Status: ${trip.status}", style = MaterialTheme.typography.headlineSmall)
-            Text("Driver: ${trip.driverName ?: "Searching..."}")
+            Text("TRIP IN PROGRESS", color = Color.Red, fontWeight = FontWeight.Bold)
+            Text("Status: ${trip.status}")
             Text("To: ${trip.dropoffLocation.address}")
-            if(trip.notes.isNotEmpty()) Text("Note: ${trip.notes}", color = Color.Gray)
         }
     }
 }
 
 @Composable
 fun ErrorScreen(err: String) {
-    Box(modifier = Modifier.fillMaxSize().background(Color.Black).verticalScroll(rememberScrollState())) {
-        Text(err, color = Color.Yellow, modifier = Modifier.padding(16.dp))
+    Column(modifier = Modifier.fillMaxSize().background(Color.Black).verticalScroll(rememberScrollState())) {
+        Text("CRASH LOG", color = Color.Red, style = MaterialTheme.typography.headlineSmall)
+        Text(err, color = Color.Yellow)
     }
 }
