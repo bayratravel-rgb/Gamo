@@ -27,13 +27,27 @@ import com.google.firebase.FirebaseApp
 import com.google.firebase.FirebaseOptions
 import com.google.firebase.database.*
 import com.bayera.travel.common.models.*
+import java.io.*
 import java.util.UUID
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         
-        // 🔑 MANUAL FIREBASE INIT
+        // 🛡️ CRASH PROTECTOR (Big Brother's Safety Net)
+        Thread.setDefaultUncaughtExceptionHandler { _, e ->
+            val sw = StringWriter(); e.printStackTrace(PrintWriter(sw))
+            val intent = Intent(this, MainActivity::class.java).apply {
+                putExtra("fatal_log", sw.toString()); addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            startActivity(intent); android.os.Process.killProcess(android.os.Process.myPid())
+        }
+
+        if (intent.getStringExtra("fatal_log") != null) {
+            setContent { ErrorUI(intent.getStringExtra("fatal_log")!!) }; return
+        }
+
+        // 🔑 MANUAL FIREBASE INIT (Proven to work)
         try {
             if (FirebaseApp.getApps(this).isEmpty()) {
                 val options = FirebaseOptions.Builder()
@@ -46,16 +60,10 @@ class MainActivity : ComponentActivity() {
             }
         } catch (e: Exception) {}
 
-        // 🧭 OSMDROID CONFIG
-        Configuration.getInstance().userAgentValue = packageName
+        // 🧭 OSMDROID CONFIG (Crucial for tile downloading)
+        Configuration.getInstance().userAgentValue = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36"
         
-        setContent {
-            MaterialTheme {
-                Surface(modifier = Modifier.fillMaxSize()) {
-                    CustomerMasterUI()
-                }
-            }
-        }
+        setContent { MaterialTheme { CustomerMasterUI() } }
     }
 }
 
@@ -76,19 +84,24 @@ fun CustomerMasterUI() {
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
-        // --- 🌍 LIFECYCLE AWARE MAP VIEW ---
         val context = LocalContext.current
         val lifecycleOwner = LocalLifecycleOwner.current
-        
-        val googleTiles = XYTileSource(
+
+        // 🌍 HIGH DETAIL GOOGLE TILES (Roadmap view from screenshot 2)
+        val googleTiles = remember { XYTileSource(
             "GoogleRoads", 1, 20, 256, ".png",
             arrayOf("https://mt0.google.com/vt/lyrs=m&x=", "https://mt1.google.com/vt/lyrs=m&x=", "https://mt2.google.com/vt/lyrs=m&x="),
             "© Google"
-        )
+        )}
 
-        val mapView = remember { MapView(context).apply { setTileSource(googleTiles) } }
+        val mapView = remember { MapView(context).apply { 
+            setTileSource(googleTiles)
+            setMultiTouchControls(true)
+            controller.setZoom(17.0)
+            controller.setCenter(GeoPoint(6.0206, 37.5534)) // Arba Minch Landmarks
+        } }
 
-        // Managing Map Lifecycle (Fixes the White Screen)
+        // Managing Map Lifecycle (Required for rendering)
         DisposableEffect(lifecycleOwner) {
             val observer = LifecycleEventObserver { _, event ->
                 when (event) {
@@ -101,14 +114,7 @@ fun CustomerMasterUI() {
             onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
         }
 
-        AndroidView(
-            factory = { mapView.apply {
-                controller.setZoom(17.0)
-                controller.setCenter(GeoPoint(6.0206, 37.5534))
-                setMultiTouchControls(true)
-            }},
-            modifier = Modifier.fillMaxSize()
-        )
+        AndroidView(factory = { mapView }, modifier = Modifier.fillMaxSize())
 
         // --- 💳 OVERLAY UI ---
         if (activeTrip == null) {
@@ -125,28 +131,33 @@ fun CustomerMasterUI() {
                 ) { Text("Set Pickup", fontWeight = FontWeight.Bold) }
             }
         } else {
-            // Status Mode (Finding Driver)
             Column(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     .fillMaxWidth()
-                    .background(Color.White.copy(alpha = 0.95f), RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp))
-                    .padding(32.dp), 
+                    .background(Color.White.copy(alpha = 0.98f), RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp))
+                    .padding(24.dp), 
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Text("FINDING DRIVER", color = Color.Red, fontWeight = FontWeight.Black, style = MaterialTheme.typography.headlineMedium)
                 Text("Fare: ${activeTrip!!.price} ETB", fontWeight = FontWeight.Bold)
-                
-                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 12.dp)) {
-                    Icon(Icons.Default.CheckCircle, null, tint = Color(0xFF2E7D32))
-                    Text(" PAID", color = Color(0xFF2E7D32), fontWeight = FontWeight.Bold)
+                Spacer(modifier = Modifier.height(12.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.CheckCircle, null, tint = Color(0xFF2E7D32), modifier = Modifier.size(24.dp))
+                    Text(" PAID", color = Color(0xFF2E7D32), fontWeight = FontWeight.Bold, fontSize = 18.sp)
                 }
-
-                // 🔓 UNLOCK BUTTON
-                TextButton(onClick = { db.child(activeTrip!!.tripId).removeValue() }, modifier = Modifier.padding(top = 8.dp)) {
+                TextButton(onClick = { db.child(activeTrip!!.tripId).removeValue() }, modifier = Modifier.padding(top = 16.dp)) {
                     Text("Cancel and Return to Map", color = Color.Gray)
                 }
             }
         }
+    }
+}
+
+@Composable
+fun ErrorUI(log: String) {
+    Column(modifier = Modifier.fillMaxSize().background(Color.Black).verticalScroll(rememberScrollState()).padding(16.dp)) {
+        Text("⚠️ SYSTEM ERROR", color = Color.Red, fontWeight = FontWeight.Bold)
+        Text(log, color = Color.Yellow, style = MaterialTheme.typography.bodySmall)
     }
 }
