@@ -2,88 +2,95 @@ package com.bayera.travel.customer
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.shape.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.*
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
-import com.google.firebase.database.FirebaseDatabase
+import com.google.firebase.database.*
 import com.bayera.travel.common.models.*
-import org.osmdroid.tileprovider.tilesource.TileSourceFactory
+import org.osmdroid.tileprovider.tilesource.XYTileSource
 import org.osmdroid.util.GeoPoint
 import org.osmdroid.views.MapView
+import org.osmdroid.views.overlay.Polyline
 import java.util.UUID
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun RideScreen(navController: NavController) {
-    var mode by remember { mutableStateOf("PICKUP") } // PICKUP, DEST, SUMMARY, SEARCHING
-    val mapState = remember { mutableStateOf<MapView?>(null) }
-    var pickupLoc by remember { mutableStateOf(GeoPoint(6.022, 37.559)) }
-    var destLoc by remember { mutableStateOf(GeoPoint(6.022, 37.559)) }
     val db = FirebaseDatabase.getInstance().getReference("trips")
+    var mode by remember { mutableStateOf("PICKUP") }
+    var activeTrip by remember { mutableStateOf<Trip?>(null) }
+    val mapState = remember { mutableStateOf<MapView?>(null) }
+    
+    // Coordinates for the Blue Line
+    val routeOverlay = remember { Polyline() }
+
+    LaunchedEffect(Unit) {
+        db.addValueEventListener(object : ValueEventListener {
+            override fun onDataChange(s: DataSnapshot) {
+                activeTrip = s.children.mapNotNull { it.getValue(Trip::class.java) }
+                    .firstOrNull { it.customerPhone == "user_bb" && it.status != TripStatus.COMPLETED }
+                
+                // If trip is accepted/in-progress, draw the line
+                activeTrip?.let {
+                    val start = GeoPoint(it.pickupLocation.lat, it.pickupLocation.lng)
+                    val end = GeoPoint(it.dropoffLocation.lat, it.dropoffLocation.lng)
+                    routeOverlay.setPoints(listOf(start, end)) // Simple line for now
+                    routeOverlay.color = android.graphics.Color.BLUE
+                    routeOverlay.width = 10f
+                    mapState.value?.overlays?.add(routeOverlay)
+                }
+            }
+            override fun onCancelled(e: DatabaseError) {}
+        })
+    }
 
     Box(modifier = Modifier.fillMaxSize()) {
+        val googleSat = XYTileSource("GoogleSat", 1, 20, 256, ".png", arrayOf("https://mt0.google.com/vt/lyrs=y&x="))
+        
         AndroidView(factory = { ctx ->
             MapView(ctx).apply {
-                setTileSource(TileSourceFactory.MAPNIK)
-                setMultiTouchControls(true)
-                // FIX TILING: Limit zoom so it doesn't show the world
-                minZoomLevel = 10.0
+                setTileSource(googleSat)
                 controller.setZoom(16.0)
-                controller.setCenter(pickupLoc)
+                controller.setCenter(GeoPoint(6.02, 37.55))
                 mapState.value = this
             }
         }, modifier = Modifier.fillMaxSize())
 
-        if (mode != "SEARCHING") {
+        if (activeTrip == null) {
+            // PICKUP SELECTION UI
             IconButton(onClick = { navController.popBackStack() }, modifier = Modifier.padding(16.dp).background(Color.White, CircleShape)) {
                 Icon(Icons.Default.ArrowBack, null)
             }
-        }
-
-        if (mode == "PICKUP" || mode == "DEST") {
-            Icon(Icons.Default.LocationOn, null, modifier = Modifier.align(Alignment.Center).size(45.dp).offset(y = (-22).dp), tint = if(mode == "PICKUP") Color(0xFF2E7D32) else Color.Red)
-        }
-
-        Card(modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(16.dp), shape = RoundedCornerShape(24.dp)) {
-            Column(modifier = Modifier.padding(20.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                when (mode) {
-                    "PICKUP" -> {
-                        Text("Start Trip From?", color = Color.Gray)
-                        Text("Arba Minch Center", fontWeight = FontWeight.Bold)
-                        Button(onClick = { pickupLoc = mapState.value?.mapCenter as GeoPoint; mode = "DEST" }, modifier = Modifier.fillMaxWidth().padding(top=12.dp), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2E7D32))) { Text("Set Pickup Here") }
-                    }
-                    "DEST" -> {
-                        Text("Where to?", color = Color.Gray)
-                        Text("Move map to Destination", fontWeight = FontWeight.Bold)
-                        Button(onClick = { destLoc = mapState.value?.mapCenter as GeoPoint; mode = "SUMMARY" }, modifier = Modifier.fillMaxWidth().padding(top=12.dp), colors = ButtonDefaults.buttonColors(containerColor = Color.Red)) { Text("Set Destination Here") }
-                    }
-                    "SUMMARY" -> {
-                        Text("Trip Summary", fontWeight = FontWeight.Black, fontSize = 22.sp)
-                        Text("Arba Minch Center → University", color = Color.Gray)
-                        Spacer(modifier = Modifier.height(16.dp))
-                        Button(onClick = {
-                            val id = UUID.randomUUID().toString()
-                            val trip = Trip(tripId = id, customerPhone = "user_gg", price = 110.0, status = TripStatus.REQUESTED)
-                            db.child(id).setValue(trip)
-                            mode = "SEARCHING"
-                        }, modifier = Modifier.fillMaxWidth().height(56.dp), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFFD600))) {
-                            Text("BOOK RIDE • 110 ETB", color = Color.Black, fontWeight = FontWeight.Bold)
+            Icon(Icons.Default.LocationOn, null, modifier = Modifier.align(Alignment.Center).size(45.dp).offset(y = (-22).dp), tint = Color(0xFF2E7D32))
+            Button(
+                onClick = {
+                    val id = UUID.randomUUID().toString()
+                    db.child(id).setValue(Trip(tripId = id, customerPhone = "user_bb", status = TripStatus.REQUESTED, price = 110.0))
+                },
+                modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(24.dp).height(56.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2E7D32)),
+                shape = RoundedCornerShape(28.dp)
+            ) { Text("Set Pickup Here") }
+        } else {
+            // THE ESSENTIAL LOCK SCREEN
+            val isEnRoute = activeTrip!!.status == TripStatus.IN_PROGRESS
+            Box(modifier = Modifier.fillMaxSize().background(if(isEnRoute) Color.Red.copy(alpha = 0.1f) else Color.Transparent)) {
+                Card(modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(16.dp), shape = RoundedCornerShape(24.dp)) {
+                    Column(modifier = Modifier.padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(if(isEnRoute) "EN ROUTE 🚕" else "FINDING DRIVER", color = if(isEnRoute) Color.Red else Color.Black, fontWeight = FontWeight.Black)
+                        Text("Destination: Arba Minch University")
+                        Text("Fare: 110.0 ETB", fontWeight = FontWeight.Bold)
+                        if(!isEnRoute) {
+                            TextButton(onClick = { db.child(activeTrip!!.tripId).removeValue() }) { Text("Cancel", color = Color.Gray) }
+                        } else {
+                            Text("Navigation UI Locked", color = Color.Gray, style = MaterialTheme.typography.labelSmall)
                         }
-                    }
-                    "SEARCHING" -> {
-                        CircularProgressIndicator(color = Color(0xFF2E7D32))
-                        Text("Finding your driver...", modifier = Modifier.padding(top = 16.dp), fontWeight = FontWeight.Bold)
-                        TextButton(onClick = { mode = "PICKUP" }) { Text("Cancel Request", color = Color.Gray) }
                     }
                 }
             }
