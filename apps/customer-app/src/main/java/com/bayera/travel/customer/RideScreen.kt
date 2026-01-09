@@ -1,15 +1,7 @@
 package com.bayera.travel.customer
 
-import android.Manifest
-import android.content.Context
-import android.content.pm.PackageManager
-import android.location.Geocoder
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -18,104 +10,81 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.*
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
-import androidx.core.content.ContextCompat
 import androidx.navigation.NavController
+import com.google.firebase.database.FirebaseDatabase
 import com.bayera.travel.common.models.*
-import com.bayera.travel.utils.FareCalculator
-import com.google.android.gms.location.LocationServices
-import com.google.firebase.database.*
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
-import okhttp3.OkHttpClient
-import okhttp3.Request
-import org.json.JSONObject
 import org.osmdroid.tileprovider.tilesource.TileSourceFactory
 import org.osmdroid.util.GeoPoint
 import org.osmdroid.views.MapView
-import org.osmdroid.views.overlay.Marker
-import java.util.*
+import java.util.UUID
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun RideScreen(navController: NavController) {
-    val context = LocalContext.current
-    var mode by remember { mutableStateOf("PICKUP") }
+    var mode by remember { mutableStateOf("PICKUP") } // PICKUP, DEST, SUMMARY, SEARCHING
     val mapState = remember { mutableStateOf<MapView?>(null) }
-    var selectedVehicle by remember { mutableStateOf(VehicleType.COMFORT) }
-    
-    // UI State
-    val pickupPoint = remember { mutableStateOf(GeoPoint(6.0206, 37.5557)) }
-    val destPoint = remember { mutableStateOf(GeoPoint(6.0206, 37.5557)) }
+    var pickupLoc by remember { mutableStateOf(GeoPoint(6.022, 37.559)) }
+    var destLoc by remember { mutableStateOf(GeoPoint(6.022, 37.559)) }
+    val db = FirebaseDatabase.getInstance().getReference("trips")
 
     Box(modifier = Modifier.fillMaxSize()) {
-        // --- 🧭 HD MAP ENGINE ---
         AndroidView(factory = { ctx ->
             MapView(ctx).apply {
                 setTileSource(TileSourceFactory.MAPNIK)
                 setMultiTouchControls(true)
-                isTilesScaledToDpi = true // Your HD Hack 🚀
+                // FIX TILING: Limit zoom so it doesn't show the world
+                minZoomLevel = 10.0
                 controller.setZoom(16.0)
-                controller.setCenter(pickupPoint.value)
+                controller.setCenter(pickupLoc)
                 mapState.value = this
             }
         }, modifier = Modifier.fillMaxSize())
 
-        // Back Button
-        IconButton(onClick = { navController.popBackStack() }, modifier = Modifier.padding(16.dp).background(Color.White, CircleShape)) {
-            Icon(Icons.Default.ArrowBack, null)
+        if (mode != "SEARCHING") {
+            IconButton(onClick = { navController.popBackStack() }, modifier = Modifier.padding(16.dp).background(Color.White, CircleShape)) {
+                Icon(Icons.Default.ArrowBack, null)
+            }
         }
 
-        // Central Pin
-        if (mode != "SUMMARY") {
-            Icon(
-                Icons.Default.LocationOn, 
-                null, 
-                modifier = Modifier.align(Alignment.Center).size(45.dp).offset(y = (-22).dp), 
-                tint = if(mode == "PICKUP") Color(0xFF2E7D32) else Color.Red
-            )
+        if (mode == "PICKUP" || mode == "DEST") {
+            Icon(Icons.Default.LocationOn, null, modifier = Modifier.align(Alignment.Center).size(45.dp).offset(y = (-22).dp), tint = if(mode == "PICKUP") Color(0xFF2E7D32) else Color.Red)
         }
 
-        // Bottom Booking Card
-        Card(
-            modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(16.dp),
-            shape = RoundedCornerShape(24.dp)
-        ) {
-            Column(modifier = Modifier.padding(20.dp)) {
-                if (mode == "PICKUP") {
-                    Text("Confirm Pickup", fontWeight = FontWeight.Bold)
-                    Button(
-                        onClick = { 
-                            pickupPoint.value = mapState.value?.mapCenter as GeoPoint
-                            mode = "DEST" 
-                        }, 
-                        modifier = Modifier.fillMaxWidth().padding(top=12.dp), 
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2E7D32))
-                    ) { Text("Set Pickup Here") }
-                } else if (mode == "DEST") {
-                    Text("Where to?", fontWeight = FontWeight.Bold)
-                    Button(
-                        onClick = { 
-                            destPoint.value = mapState.value?.mapCenter as GeoPoint
-                            mode = "SUMMARY" 
-                        }, 
-                        modifier = Modifier.fillMaxWidth().padding(top=12.dp), 
-                        colors = ButtonDefaults.buttonColors(containerColor = Color.Red)
-                    ) { Text("Set Destination Here") }
-                } else {
-                    Text("Trip Summary", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text("Fare: 110.0 ETB", color = Color(0xFF2E7D32), fontWeight = FontWeight.Bold, fontSize = 24.sp)
-                    Button(
-                        onClick = { /* Firebase Logic */ }, 
-                        modifier = Modifier.fillMaxWidth().padding(top=16.dp).height(50.dp), 
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFFD600))
-                    ) { Text("BOOK RIDE", color = Color.Black, fontWeight = FontWeight.Bold) }
+        Card(modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(16.dp), shape = RoundedCornerShape(24.dp)) {
+            Column(modifier = Modifier.padding(20.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                when (mode) {
+                    "PICKUP" -> {
+                        Text("Start Trip From?", color = Color.Gray)
+                        Text("Arba Minch Center", fontWeight = FontWeight.Bold)
+                        Button(onClick = { pickupLoc = mapState.value?.mapCenter as GeoPoint; mode = "DEST" }, modifier = Modifier.fillMaxWidth().padding(top=12.dp), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2E7D32))) { Text("Set Pickup Here") }
+                    }
+                    "DEST" -> {
+                        Text("Where to?", color = Color.Gray)
+                        Text("Move map to Destination", fontWeight = FontWeight.Bold)
+                        Button(onClick = { destLoc = mapState.value?.mapCenter as GeoPoint; mode = "SUMMARY" }, modifier = Modifier.fillMaxWidth().padding(top=12.dp), colors = ButtonDefaults.buttonColors(containerColor = Color.Red)) { Text("Set Destination Here") }
+                    }
+                    "SUMMARY" -> {
+                        Text("Trip Summary", fontWeight = FontWeight.Black, fontSize = 22.sp)
+                        Text("Arba Minch Center → University", color = Color.Gray)
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Button(onClick = {
+                            val id = UUID.randomUUID().toString()
+                            val trip = Trip(tripId = id, customerPhone = "user_gg", price = 110.0, status = TripStatus.REQUESTED)
+                            db.child(id).setValue(trip)
+                            mode = "SEARCHING"
+                        }, modifier = Modifier.fillMaxWidth().height(56.dp), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFFD600))) {
+                            Text("BOOK RIDE • 110 ETB", color = Color.Black, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                    "SEARCHING" -> {
+                        CircularProgressIndicator(color = Color(0xFF2E7D32))
+                        Text("Finding your driver...", modifier = Modifier.padding(top = 16.dp), fontWeight = FontWeight.Bold)
+                        TextButton(onClick = { mode = "PICKUP" }) { Text("Cancel Request", color = Color.Gray) }
+                    }
                 }
             }
         }
