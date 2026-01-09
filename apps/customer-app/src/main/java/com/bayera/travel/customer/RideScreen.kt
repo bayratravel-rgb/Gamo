@@ -38,20 +38,16 @@ import org.osmdroid.tileprovider.tilesource.TileSourceFactory
 import org.osmdroid.util.GeoPoint
 import org.osmdroid.views.MapView
 import org.osmdroid.views.overlay.Marker
-import org.osmdroid.views.overlay.Polyline
 import java.util.*
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun RideScreen(navController: NavController) {
     val context = LocalContext.current
-    val scope = rememberCoroutineScope()
-    
-    var mode by remember { mutableStateOf("PICKUP") } // PICKUP, DEST, SUMMARY, SEARCHING
+    var mode by remember { mutableStateOf("PICKUP") }
     var pickupGeo by remember { mutableStateOf(GeoPoint(6.0206, 37.5557)) }
     var destGeo by remember { mutableStateOf(GeoPoint(6.0206, 37.5557)) }
-    var selectedVehicle by remember { mutableStateOf(VehicleType.BAJAJ) }
-    var addressText by remember { mutableStateOf("Locating...") }
+    var selectedVehicle by remember { mutableStateOf(VehicleType.COMFORT) }
     val mapState = remember { mutableStateOf<MapView?>(null) }
 
     Box(modifier = Modifier.fillMaxSize()) {
@@ -59,35 +55,33 @@ fun RideScreen(navController: NavController) {
             MapView(ctx).apply {
                 setTileSource(TileSourceFactory.MAPNIK)
                 setMultiTouchControls(true)
+                isTilesScaledToDpi = true // YOUR HD HACK 🚀
                 controller.setZoom(16.0)
                 controller.setCenter(pickupGeo)
                 mapState.value = this
             }
         }, modifier = Modifier.fillMaxSize())
 
-        // Back Button
         IconButton(onClick = { navController.popBackStack() }, modifier = Modifier.padding(16.dp).background(Color.White, CircleShape)) {
             Icon(Icons.Default.ArrowBack, null)
         }
 
-        // Central Pin
-        if (mode == "PICKUP" || mode == "DEST") {
+        if (mode != "SUMMARY") {
             Icon(Icons.Default.LocationOn, null, modifier = Modifier.align(Alignment.Center).size(45.dp).offset(y = (-22).dp), tint = if(mode=="PICKUP") Color(0xFF2E7D32) else Color.Red)
         }
 
-        // Booking Card
         Card(modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(16.dp), shape = RoundedCornerShape(24.dp)) {
             Column(modifier = Modifier.padding(20.dp)) {
                 if (mode == "PICKUP") {
-                    Text("Start Trip From?", color = Color.Gray)
+                    Text("Confirm Pickup", fontWeight = FontWeight.Bold)
                     Button(onClick = { pickupGeo = mapState.value?.mapCenter as GeoPoint; mode = "DEST" }, modifier = Modifier.fillMaxWidth().padding(top=12.dp), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2E7D32))) { Text("Set Pickup Here") }
                 } else if (mode == "DEST") {
-                    Text("Where to?", color = Color.Gray)
+                    Text("Where to?", fontWeight = FontWeight.Bold)
                     Button(onClick = { destGeo = mapState.value?.mapCenter as GeoPoint; mode = "SUMMARY" }, modifier = Modifier.fillMaxWidth().padding(top=12.dp), colors = ButtonDefaults.buttonColors(containerColor = Color.Red)) { Text("Set Destination Here") }
                 } else {
-                    Text("Trip Summary", fontWeight = FontWeight.Bold)
-                    Text("Fare: 110.0 ETB", style = MaterialTheme.typography.headlineMedium, color = Color(0xFF2E7D32))
-                    Button(onClick = { /* Push to Firebase */ }, modifier = Modifier.fillMaxWidth().padding(top=16.dp), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFFD600))) { Text("BOOK RIDE", color = Color.Black) }
+                    Text("Trip Summary", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                    Text("Fare: 110.0 ETB", color = Color(0xFF2E7D32), fontWeight = FontWeight.Bold, fontSize = 24.sp)
+                    Button(onClick = { /* Push to Firebase */ }, modifier = Modifier.fillMaxWidth().padding(top=16.dp).height(50.dp), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFFD600))) { Text("BOOK RIDE", color = Color.Black, fontWeight = FontWeight.Bold) }
                 }
             }
         }
