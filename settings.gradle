@@ -6,11 +6,9 @@ pluginManagement {
     }
 }
 dependencyResolutionManagement {
-    // Mode.PREFER_SETTINGS allows us to define mirrors here once for the whole project
     repositoriesMode.set(RepositoriesMode.PREFER_SETTINGS)
     repositories {
         google()
-        // Use direct Maven Central URL (bypass mirrors that might be blocked)
         maven { url "https://repo1.maven.org/maven2/" }
         mavenCentral()
         maven { url "https://jitpack.io" }
@@ -19,7 +17,9 @@ dependencyResolutionManagement {
 
 rootProject.name = "BayeraTravel"
 
+// Include all parts of the Super App
 include ':packages:shared-types'
+include ':packages:utils'
 include ':apps:customer-app'
 include ':apps:driver-app'
 include ':apps:merchant-app'
