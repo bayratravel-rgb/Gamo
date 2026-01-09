@@ -18,11 +18,14 @@ import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.*
-import androidx.lifecycle.*
+import androidx.navigation.NavController
+import androidx.navigation.compose.*
 import org.osmdroid.config.Configuration
 import org.osmdroid.tileprovider.tilesource.XYTileSource
 import org.osmdroid.util.GeoPoint
 import org.osmdroid.views.MapView
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import com.google.firebase.FirebaseApp
 import com.google.firebase.FirebaseOptions
 import com.google.firebase.database.*
@@ -32,6 +35,9 @@ import java.util.UUID
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        
+        // --- FIX MAP GRID: SET USER AGENT ---
+        Configuration.getInstance().userAgentValue = "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
         
         try {
             if (FirebaseApp.getApps(this).isEmpty()) {
@@ -44,44 +50,13 @@ class MainActivity : ComponentActivity() {
             }
         } catch (e: Exception) {}
 
-        Configuration.getInstance().userAgentValue = "Mozilla/5.0"
-        setContent { MaterialTheme { CustomerSuperApp() } }
-    }
-}
-
-@Composable
-fun CustomerSuperApp() {
-    var currentScreen by remember { mutableStateOf("home") }
-    var activeTrip by remember { mutableStateOf<Trip?>(null) }
-    val db = FirebaseDatabase.getInstance().getReference("trips")
-
-    LaunchedEffect(Unit) {
-        db.addValueEventListener(object : ValueEventListener {
-            override fun onDataChange(s: DataSnapshot) {
-                activeTrip = s.children.mapNotNull { it.getValue(Trip::class.java) }
-                    .firstOrNull { it.customerPhone == "user_yy" && it.status != TripStatus.COMPLETED }
-                if (activeTrip != null) currentScreen = "status"
-            }
-            override fun onCancelled(e: DatabaseError) {}
-        })
-    }
-
-    Scaffold(
-        bottomBar = {
-            if (activeTrip == null && currentScreen == "home") {
-                NavigationBar(containerColor = Color.White) {
-                    NavigationBarItem(icon = { Icon(Icons.Default.Home, null) }, label = { Text("Home") }, selected = true, onClick = {})
-                    NavigationBarItem(icon = { Icon(Icons.Default.History, null) }, label = { Text("Activity") }, selected = false, onClick = {})
-                    NavigationBarItem(icon = { Icon(Icons.Default.Person, null) }, label = { Text("Account") }, selected = false, onClick = {})
+        setContent {
+            val nav = rememberNavController()
+            MaterialTheme {
+                NavHost(navController = nav, startDestination = "dash") {
+                    composable("dash") { DashboardUI(nav) }
+                    composable("ride") { RideBookingFlow(nav) }
                 }
-            }
-        }
-    ) { p ->
-        Box(modifier = Modifier.padding(p)) {
-            when (currentScreen) {
-                "home" -> SuperDashboard { currentScreen = "map" }
-                "map" -> InteractiveMapFlow(db) { currentScreen = "home" }
-                "status" -> activeTrip?.let { StatusOverlayUI(it, db) }
             }
         }
     }
@@ -89,14 +64,13 @@ fun CustomerSuperApp() {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SuperDashboard(onRide: () -> Unit) {
+fun DashboardUI(nav: NavController) {
     Column(modifier = Modifier.fillMaxSize().background(Color.White).padding(20.dp)) {
         Text("Bayera Travel", style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold)
         Text("Hi, bb!", style = MaterialTheme.typography.titleLarge, color = Color.Gray)
-        Spacer(modifier = Modifier.height(24.dp))
-        Text("Services", fontWeight = FontWeight.Bold, modifier = Modifier.padding(bottom = 12.dp))
+        Spacer(modifier = Modifier.height(32.dp))
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-            Card(onClick = onRide, modifier = Modifier.weight(1f).height(140.dp), colors = CardDefaults.cardColors(containerColor = Color(0xFFE3F2FD))) {
+            Card(onClick = { nav.navigate("ride") }, modifier = Modifier.weight(1f).height(140.dp), colors = CardDefaults.cardColors(containerColor = Color(0xFFE3F2FD))) {
                 Column(modifier = Modifier.fillMaxSize(), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
                     Icon(Icons.Default.DirectionsCar, null, tint = Color(0xFF1976D2), modifier = Modifier.size(40.dp))
                     Text("Ride", fontWeight = FontWeight.Bold)
@@ -121,10 +95,15 @@ fun SuperDashboard(onRide: () -> Unit) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun InteractiveMapFlow(db: DatabaseReference, onBack: () -> Unit) {
+fun RideBookingFlow(nav: NavController) {
     var mode by remember { mutableStateOf("PICKUP") } // PICKUP -> DEST -> SUMMARY
+    var pickupLoc by remember { mutableStateOf(GeoPoint(6.02, 37.55)) }
+    var destLoc by remember { mutableStateOf(GeoPoint(6.02, 37.55)) }
+    
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
+    
+    // --- HIGH DETAIL GOOGLE TILES ---
     val googleTiles = remember { XYTileSource("GoogleRoads", 1, 20, 256, ".png", arrayOf("https://mt0.google.com/vt/lyrs=m&x="), "© Google") }
     val mapView = remember { MapView(context).apply { setTileSource(googleTiles); setMultiTouchControls(true) } }
 
@@ -138,19 +117,22 @@ fun InteractiveMapFlow(db: DatabaseReference, onBack: () -> Unit) {
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
-        AndroidView(factory = { mapView.apply { controller.setZoom(17.0); controller.setCenter(GeoPoint(6.02, 37.55)) } }, modifier = Modifier.fillMaxSize())
+        AndroidView(factory = { mapView.apply { controller.setZoom(17.0); controller.setCenter(GeoPoint(6.0206, 37.5534)) } }, modifier = Modifier.fillMaxSize())
         
-        IconButton(onClick = onBack, modifier = Modifier.padding(16.dp).background(Color.White, CircleShape)) { Icon(Icons.Default.ArrowBack, null) }
-        
+        IconButton(onClick = { nav.popBackStack() }, modifier = Modifier.padding(16.dp).background(Color.White, CircleShape)) { Icon(Icons.Default.ArrowBack, null) }
+
         if (mode != "SUMMARY") {
+            // 🎯 PIN INDICATOR
             Icon(Icons.Default.LocationOn, null, modifier = Modifier.align(Alignment.Center).size(45.dp).offset(y = (-22).dp), tint = if(mode=="PICKUP") Color(0xFF2E7D32) else Color.Red)
+            
             Button(
-                onClick = { if(mode=="PICKUP") mode = "DEST" else mode = "SUMMARY" },
+                onClick = { if(mode=="PICKUP") { pickupLoc = mapView.mapCenter as GeoPoint; mode = "DEST" } else { destLoc = mapView.mapCenter as GeoPoint; mode = "SUMMARY" } },
                 modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(24.dp).height(56.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = if(mode=="PICKUP") Color(0xFF2E7D32) else Color.Red),
                 shape = RoundedCornerShape(28.dp)
             ) { Text(if(mode=="PICKUP") "Set Pickup Here" else "Set Destination Here", fontWeight = FontWeight.Bold) }
         } else {
+            // 💳 SUMMARY CARD
             Card(modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(16.dp), shape = RoundedCornerShape(24.dp)) {
                 Column(modifier = Modifier.padding(20.dp)) {
                     Text("Trip Summary", fontWeight = FontWeight.Black, fontSize = 22.sp)
@@ -159,28 +141,11 @@ fun InteractiveMapFlow(db: DatabaseReference, onBack: () -> Unit) {
                         Spacer(modifier = Modifier.width(8.dp))
                         SuggestionChip(onClick = {}, label = { Text("LUXURY") })
                     }
-                    Button(onClick = {
-                        val id = UUID.randomUUID().toString()
-                        db.child(id).setValue(Trip(tripId = id, customerPhone = "user_yy", price = 110.0, status = TripStatus.REQUESTED))
-                    }, modifier = Modifier.fillMaxWidth().height(56.dp), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFFD600))) {
+                    Button(onClick = { /* Firebase push logic */ }, modifier = Modifier.fillMaxWidth().height(56.dp), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFFD600))) {
                         Text("BOOK RIDE • 110 ETB", color = Color.Black, fontWeight = FontWeight.Bold)
                     }
                 }
             }
-        }
-    }
-}
-
-@Composable
-fun StatusOverlayUI(trip: Trip, db: DatabaseReference) {
-    Box(modifier = Modifier.fillMaxSize()) {
-        // Map stays visible in background
-        Column(modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth().background(Color(0xFFF1EBF2), RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp)).padding(32.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-            Text("FINDING DRIVER", color = Color.Red, fontWeight = FontWeight.Black, style = MaterialTheme.typography.headlineMedium)
-            Text("Fare: ${trip.price} ETB", fontWeight = FontWeight.Bold)
-            Spacer(modifier = Modifier.height(16.dp))
-            Card(colors = CardDefaults.cardColors(containerColor = Color.White)) { Text("✅ PAID", color = Color(0xFF2E7D32), fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal=16.dp, vertical=8.dp)) }
-            TextButton(onClick = { db.child(trip.tripId).removeValue() }, modifier = Modifier.padding(top=16.dp)) { Text("Cancel & Reset", color = Color.Gray) }
         }
     }
 }
