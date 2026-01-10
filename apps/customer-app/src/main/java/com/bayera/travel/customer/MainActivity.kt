@@ -1,6 +1,6 @@
 package com.bayera.travel.customer
 
-import android.content.*
+import android.content.Context
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -22,8 +22,9 @@ import androidx.navigation.NavController
 import androidx.navigation.compose.*
 import com.google.firebase.FirebaseApp
 import com.google.firebase.FirebaseOptions
-import com.google.firebase.database.FirebaseDatabase
+import com.google.firebase.database.*
 import com.bayera.travel.common.models.*
+import java.util.UUID
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -40,7 +41,7 @@ class MainActivity : ComponentActivity() {
             val nav = rememberNavController()
             val prefs = LocalContext.current.getSharedPreferences("user_prefs", Context.MODE_PRIVATE)
             val start = if (prefs.getString("email", "").isNullOrEmpty()) "login" else "dash"
-            MaterialTheme {
+            MaterialTheme(colorScheme = darkColorScheme(surface = Color(0xFF1E1E1E))) {
                 NavHost(navController = nav, startDestination = start) {
                     composable("login") { CustomerLoginUI(nav) }
                     composable("dash") { CustomerDashboardUI(nav) }
@@ -52,19 +53,20 @@ class MainActivity : ComponentActivity() {
 
 @Composable
 fun CustomerLoginUI(nav: NavController) {
-    val prefs = LocalContext.current.getSharedPreferences("user_prefs", Context.MODE_PRIVATE)
+    val context = LocalContext.current
     var name by remember { mutableStateOf("") }
     var email by remember { mutableStateOf("") }
-
-    Column(modifier = Modifier.fillMaxSize().background(Color(0xFF1A1A1A)).padding(32.dp), verticalArrangement = Arrangement.Center) {
+    Column(modifier = Modifier.fillMaxSize().background(Color(0xFF121212)).padding(32.dp), verticalArrangement = Arrangement.Center) {
         Text("Welcome to Bayera", color = Color.White, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
-        Text("Registration with Email", color = Color.Gray)
         Spacer(modifier = Modifier.height(32.dp))
-        OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("Full Name") }, modifier = Modifier.fillMaxWidth(), colors = OutlinedTextFieldDefaults.colors(unfocusedBorderColor = Color.Gray, focusedTextColor = Color.White))
+        OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("Name") }, modifier = Modifier.fillMaxWidth())
         Spacer(modifier = Modifier.height(16.dp))
-        OutlinedTextField(value = email, onValueChange = { email = it }, label = { Text("Email Address") }, modifier = Modifier.fillMaxWidth(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email), colors = OutlinedTextFieldDefaults.colors(unfocusedBorderColor = Color.Gray, focusedTextColor = Color.White))
-        Button(onClick = { if(name.isNotEmpty() && email.contains("@")) { prefs.edit().putString("name", name).putString("email", email).apply(); nav.navigate("dash") } }, modifier = Modifier.fillMaxWidth().padding(top=32.dp).height(56.dp), colors = ButtonDefaults.buttonColors(containerColor = Color.White), shape = RoundedCornerShape(28.dp)) {
-            Text("Login", color = Color.Black, fontWeight = FontWeight.Bold)
+        OutlinedTextField(value = email, onValueChange = { email = it }, label = { Text("Email") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email), modifier = Modifier.fillMaxWidth())
+        Button(onClick = { if(name.isNotEmpty() && email.contains("@")) {
+            context.getSharedPreferences("user_prefs", Context.MODE_PRIVATE).edit().putString("name", name).putString("email", email).apply()
+            nav.navigate("dash")
+        }}, modifier = Modifier.fillMaxWidth().padding(top=32.dp).height(56.dp), colors = ButtonDefaults.buttonColors(containerColor = Color.White)) {
+            Text("Get Started", color = Color.Black, fontWeight = FontWeight.Bold)
         }
     }
 }
@@ -73,25 +75,23 @@ fun CustomerLoginUI(nav: NavController) {
 @Composable
 fun CustomerDashboardUI(nav: NavController) {
     val prefs = LocalContext.current.getSharedPreferences("user_prefs", Context.MODE_PRIVATE)
-    val userName = prefs.getString("name", "User")
-    Column(modifier = Modifier.fillMaxSize().background(Color.White).padding(20.dp)) {
-        Text("Bayera Travel", style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.Bold)
-        Text("Hi, $userName!", style = MaterialTheme.typography.titleLarge, color = Color.Gray)
+    val name = prefs.getString("name", "bb")
+    Column(modifier = Modifier.fillMaxSize().padding(20.dp)) {
+        Text("Bayera Travel", style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold)
+        Text("Hi, $name!", color = Color.Gray)
         Spacer(modifier = Modifier.height(32.dp))
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-            Card(onClick = {}, modifier = Modifier.weight(1f).height(140.dp), colors = CardDefaults.cardColors(containerColor = Color(0xFFE3F2FD))) {
+        Row(modifier = Modifier.fillMaxWidth()) {
+            Card(modifier = Modifier.weight(1f).height(140.dp), colors = CardDefaults.cardColors(containerColor = Color(0xFFE3F2FD))) {
                 Column(modifier = Modifier.fillMaxSize(), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
-                    Icon(Icons.Default.DirectionsCar, null, tint = Color(0xFF1976D2), modifier = Modifier.size(40.dp))
-                    Text("Ride", fontWeight = FontWeight.Bold)
+                    Icon(Icons.Default.DirectionsCar, null, tint = Color(0xFF1976D2)); Text("Ride", fontWeight = FontWeight.Bold, color = Color.Black)
                 }
             }
+            Spacer(modifier = Modifier.width(16.dp))
             Card(modifier = Modifier.weight(1f).height(140.dp), colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF3E0))) {
                 Column(modifier = Modifier.fillMaxSize(), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
-                    Icon(Icons.Default.ShoppingCart, null, tint = Color(0xFFF57C00), modifier = Modifier.size(40.dp))
-                    Text("Shopping", fontWeight = FontWeight.Bold)
+                    Icon(Icons.Default.ShoppingCart, null, tint = Color(0xFFF57C00)); Text("Shopping", fontWeight = FontWeight.Bold, color = Color.Black)
                 }
             }
         }
-        TextButton(onClick = { prefs.edit().clear().apply(); nav.navigate("login") }, modifier = Modifier.padding(top=20.dp)) { Text("Logout", color = Color.Red) }
     }
 }

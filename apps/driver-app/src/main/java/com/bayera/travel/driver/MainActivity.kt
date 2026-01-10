@@ -1,10 +1,10 @@
 package com.bayera.travel.driver
 
-import android.content.*
+import android.content.Context
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.compose.foundation.background
+import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
@@ -42,7 +42,7 @@ class MainActivity : ComponentActivity() {
             MaterialTheme {
                 NavHost(navController = nav, startDestination = start) {
                     composable("login") { DriverLoginUI(nav) }
-                    composable("dash") { DriverDashboardUI() }
+                    composable("dash") { DriverDashboardUI(nav) }
                 }
             }
         }
@@ -56,7 +56,7 @@ fun DriverLoginUI(nav: NavController) {
     var email by remember { mutableStateOf("") }
     Column(modifier = Modifier.fillMaxSize().padding(32.dp), verticalArrangement = Arrangement.Center) {
         Text("Partner Login", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
-        Spacer(modifier = Modifier.height(24.dp))
+        Spacer(modifier = Modifier.height(32.dp))
         OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("Full Name") }, modifier = Modifier.fillMaxWidth())
         Spacer(modifier = Modifier.height(16.dp))
         OutlinedTextField(value = email, onValueChange = { email = it }, label = { Text("Email Address") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email), modifier = Modifier.fillMaxWidth())
@@ -67,28 +67,34 @@ fun DriverLoginUI(nav: NavController) {
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun DriverDashboardUI() {
+fun DriverDashboardUI(nav: NavController) {
     val prefs = LocalContext.current.getSharedPreferences("driver_prefs", Context.MODE_PRIVATE)
-    val email = prefs.getString("email", "driver@test,com") ?: "driver@test,com"
-    val sanitizedEmail = email.replace(".", ",") // Firebase safety
-    val db = FirebaseDatabase.getInstance().getReference("drivers").child(sanitizedEmail).child("balance")
+    val email = prefs.getString("email", "driver@test,com") ?: ""
+    val sanitized = email.replace(".", ",")
     var balance by remember { mutableStateOf(0.0) }
-
+    
     LaunchedEffect(Unit) {
-        db.addValueEventListener(object : ValueEventListener {
-            override fun onDataChange(s: DataSnapshot) { balance = s.getValue(Double::class.java) ?: 500.0 }
-            override fun onCancelled(e: DatabaseError) {}
-        })
+        FirebaseDatabase.getInstance().getReference("drivers").child(sanitized).child("balance")
+            .addValueEventListener(object : ValueEventListener {
+                override fun onDataChange(s: DataSnapshot) { balance = s.getValue(Double::class.java) ?: 500.0 }
+                override fun onCancelled(e: DatabaseError) {}
+            })
     }
 
-    Column(modifier = Modifier.fillMaxSize().background(Color(0xFFE8F5E9)).padding(16.dp)) {
-        Text("Hi, Partner", fontWeight = FontWeight.Bold)
-        Spacer(modifier = Modifier.height(16.dp))
-        Card(modifier = Modifier.fillMaxWidth().height(150.dp), colors = CardDefaults.cardColors(containerColor = Color(0xFF2E7D32)), shape = RoundedCornerShape(24.dp)) {
-            Column(modifier = Modifier.fillMaxSize(), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
-                Text("Total Earnings", color = Color.White.copy(alpha = 0.8f))
-                Text("${String.format("%.1f", balance)} ETB", color = Color.White, fontSize = 42.sp, fontWeight = FontWeight.Bold)
+    Scaffold(bottomBar = { NavigationBar(containerColor = Color.White) { 
+        NavigationBarItem(icon = { Icon(Icons.Default.Home, null) }, label = { Text("Rides") }, selected = true, onClick = {})
+        NavigationBarItem(icon = { Icon(Icons.Default.AccountBalanceWallet, null) }, label = { Text("Earnings") }, selected = false, onClick = {})
+    }}) { p ->
+        Column(modifier = Modifier.padding(p).fillMaxSize().background(Color(0xFFE8F5E9)).padding(16.dp)) {
+            Text("Hi, Partner", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+            Spacer(modifier = Modifier.height(24.dp))
+            Card(modifier = Modifier.fillMaxWidth().height(150.dp), colors = CardDefaults.cardColors(containerColor = Color(0xFF2E7D32)), shape = RoundedCornerShape(16.dp)) {
+                Column(modifier = Modifier.fillMaxSize(), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text("Total Earnings", color = Color.White.copy(alpha = 0.8f))
+                    Text("${String.format("%.1f", balance)} ETB", color = Color.White, fontSize = 42.sp, fontWeight = FontWeight.Bold)
+                }
             }
         }
     }
