@@ -6,7 +6,8 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.*
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -15,14 +16,14 @@ import androidx.compose.ui.*
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.*
 import androidx.navigation.NavController
 import androidx.navigation.compose.*
 import com.google.firebase.FirebaseApp
 import com.google.firebase.FirebaseOptions
-import com.google.firebase.database.*
+import com.google.firebase.database.FirebaseDatabase
 import com.bayera.travel.common.models.*
-import java.util.UUID
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -38,11 +39,11 @@ class MainActivity : ComponentActivity() {
         setContent {
             val nav = rememberNavController()
             val prefs = LocalContext.current.getSharedPreferences("user_prefs", Context.MODE_PRIVATE)
-            val start = if (prefs.getString("name", "").isNullOrEmpty()) "login" else "dash"
+            val start = if (prefs.getString("email", "").isNullOrEmpty()) "login" else "dash"
             MaterialTheme {
                 NavHost(navController = nav, startDestination = start) {
-                    composable("login") { LoginUI(nav) }
-                    composable("dash") { DashboardUI(nav) }
+                    composable("login") { CustomerLoginUI(nav) }
+                    composable("dash") { CustomerDashboardUI(nav) }
                 }
             }
         }
@@ -50,38 +51,35 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-fun LoginUI(nav: NavController) {
+fun CustomerLoginUI(nav: NavController) {
     val prefs = LocalContext.current.getSharedPreferences("user_prefs", Context.MODE_PRIVATE)
     var name by remember { mutableStateOf("") }
+    var email by remember { mutableStateOf("") }
+
     Column(modifier = Modifier.fillMaxSize().background(Color(0xFF1A1A1A)).padding(32.dp), verticalArrangement = Arrangement.Center) {
         Text("Welcome to Bayera", color = Color.White, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
-        Text("Enter your details to start", color = Color.Gray)
+        Text("Registration with Email", color = Color.Gray)
         Spacer(modifier = Modifier.height(32.dp))
         OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("Full Name") }, modifier = Modifier.fillMaxWidth(), colors = OutlinedTextFieldDefaults.colors(unfocusedBorderColor = Color.Gray, focusedTextColor = Color.White))
-        Button(onClick = { if(name.isNotEmpty()) { prefs.edit().putString("name", name).apply(); nav.navigate("dash") } }, modifier = Modifier.fillMaxWidth().padding(top=32.dp).height(56.dp), colors = ButtonDefaults.buttonColors(containerColor = Color.White), shape = RoundedCornerShape(28.dp)) {
-            Text("Get Started", color = Color.Black, fontWeight = FontWeight.Bold)
+        Spacer(modifier = Modifier.height(16.dp))
+        OutlinedTextField(value = email, onValueChange = { email = it }, label = { Text("Email Address") }, modifier = Modifier.fillMaxWidth(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email), colors = OutlinedTextFieldDefaults.colors(unfocusedBorderColor = Color.Gray, focusedTextColor = Color.White))
+        Button(onClick = { if(name.isNotEmpty() && email.contains("@")) { prefs.edit().putString("name", name).putString("email", email).apply(); nav.navigate("dash") } }, modifier = Modifier.fillMaxWidth().padding(top=32.dp).height(56.dp), colors = ButtonDefaults.buttonColors(containerColor = Color.White), shape = RoundedCornerShape(28.dp)) {
+            Text("Login", color = Color.Black, fontWeight = FontWeight.Bold)
         }
     }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun DashboardUI(nav: NavController) {
+fun CustomerDashboardUI(nav: NavController) {
     val prefs = LocalContext.current.getSharedPreferences("user_prefs", Context.MODE_PRIVATE)
-    val userName = prefs.getString("name", "bb")
+    val userName = prefs.getString("name", "User")
     Column(modifier = Modifier.fillMaxSize().background(Color.White).padding(20.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Column {
-                Text("Bayera Travel", style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.Bold)
-                Text("Hi, $userName!", style = MaterialTheme.typography.titleLarge, color = Color.Gray)
-            }
-            Spacer(modifier = Modifier.weight(1f))
-            IconButton(onClick = { prefs.edit().clear().apply(); nav.navigate("login") }) { Icon(Icons.Default.Settings, null) }
-        }
+        Text("Bayera Travel", style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.Bold)
+        Text("Hi, $userName!", style = MaterialTheme.typography.titleLarge, color = Color.Gray)
         Spacer(modifier = Modifier.height(32.dp))
-        Text("Services", fontWeight = FontWeight.Bold, color = Color.Gray)
-        Row(modifier = Modifier.fillMaxWidth().padding(top=16.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-            Card(modifier = Modifier.weight(1f).height(140.dp), colors = CardDefaults.cardColors(containerColor = Color(0xFFE3F2FD))) {
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+            Card(onClick = {}, modifier = Modifier.weight(1f).height(140.dp), colors = CardDefaults.cardColors(containerColor = Color(0xFFE3F2FD))) {
                 Column(modifier = Modifier.fillMaxSize(), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
                     Icon(Icons.Default.DirectionsCar, null, tint = Color(0xFF1976D2), modifier = Modifier.size(40.dp))
                     Text("Ride", fontWeight = FontWeight.Bold)
@@ -94,5 +92,6 @@ fun DashboardUI(nav: NavController) {
                 }
             }
         }
+        TextButton(onClick = { prefs.edit().clear().apply(); nav.navigate("login") }, modifier = Modifier.padding(top=20.dp)) { Text("Logout", color = Color.Red) }
     }
 }
