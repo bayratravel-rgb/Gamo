@@ -15,6 +15,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.*
 import com.google.firebase.FirebaseApp
+import com.google.firebase.FirebaseOptions
 import com.google.firebase.database.*
 import com.bayera.travel.common.models.*
 import java.util.UUID
@@ -22,12 +23,17 @@ import java.util.UUID
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        try { FirebaseApp.initializeApp(this) } catch (e: Exception) {}
-        setContent { 
-            MaterialTheme(colorScheme = lightColorScheme(primary = Color(0xFF1A237E))) { 
-                CustomerUrbanaApp() 
-            } 
-        }
+        try {
+            if (FirebaseApp.getApps(this).isEmpty()) {
+                val opt = FirebaseOptions.Builder()
+                    .setApplicationId("1:643765664968:android:801ade1a7ec854095af9fd")
+                    .setApiKey("AIzaSyCuzSPe6f4JoQYuYS-JskaHT11jKNEuA20")
+                    .setDatabaseUrl("https://bayera-travel-default-rtdb.europe-west1.firebasedatabase.app")
+                    .setProjectId("bayera-travel").build()
+                FirebaseApp.initializeApp(this, opt)
+            }
+        } catch (e: Exception) {}
+        setContent { MaterialTheme { CustomerUrbanaApp() } }
     }
 }
 
@@ -43,6 +49,7 @@ fun CustomerUrbanaApp() {
                 activeTrip = s.children.mapNotNull { it.getValue(Trip::class.java) }
                     .firstOrNull { it.customerPhone == "user_bb" && it.status != TripStatus.COMPLETED }
                 if (activeTrip != null) screen = "status"
+                else if (screen == "status") screen = "home"
             }
             override fun onCancelled(e: DatabaseError) {}
         })
@@ -52,19 +59,15 @@ fun CustomerUrbanaApp() {
         if (screen == "home") {
             DashboardUI { screen = "map" }
         } else {
+            // Map Background
             Box(modifier = Modifier.fillMaxSize().background(Color(0xFFEEEEEE))) {
-                if (screen == "map") BookingUI(db) { screen = "home" }
-                if (screen == "status") activeTrip?.let { StatusUI(it, db) }
+                if (screen == "map") {
+                    BookingUI(db) { screen = "home" }
+                }
+                if (screen == "status") {
+                    activeTrip?.let { StatusUI(it, db) }
+                }
             }
-        }
-
-        if (screen != "home") {
-            FloatingActionButton(
-                onClick = { },
-                modifier = Modifier.align(Alignment.TopEnd).padding(16.dp),
-                containerColor = Color(0xFF009688),
-                shape = CircleShape
-            ) { Icon(Icons.Default.Shield, null, tint = Color.White) }
         }
     }
 }
@@ -77,7 +80,7 @@ fun DashboardUI(onRide: () -> Unit) {
         Text("Hi, Ravi!", color = Color.Gray)
         Spacer(modifier = Modifier.height(32.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-            Card(onClick = onRide, modifier = Modifier.weight(1f).height(120.dp), colors = CardDefaults.cardColors(containerColor = Color(0xFFE8EAF6))) {
+            Card(onClick = onRide, modifier = Modifier.weight(1f).height(120.dp), colors = CardDefaults.cardColors(containerColor = Color(0xFFE3F2FD))) {
                 Column(modifier = Modifier.fillMaxSize(), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
                     Icon(Icons.Default.DirectionsCar, null, tint = Color(0xFF1A237E)); Text("Ride", fontWeight = FontWeight.Bold)
                 }
@@ -92,8 +95,8 @@ fun DashboardUI(onRide: () -> Unit) {
 }
 
 @Composable
-fun BookingUI(db: DatabaseReference, onBack: () -> Unit) {
-    Card(modifier = Modifier.fillMaxWidth().align(Alignment.BottomCenter).padding(16.dp), shape = RoundedCornerShape(24.dp)) {
+fun BoxScope.BookingUI(db: DatabaseReference, onBack: () -> Unit) {
+    Card(modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(16.dp), shape = RoundedCornerShape(24.dp)) {
         Column(modifier = Modifier.padding(24.dp)) {
             Text("Total Fare: 110.00 ETB", fontWeight = FontWeight.ExtraBold, fontSize = 22.sp, color = Color(0xFF2E7D32))
             Spacer(modifier = Modifier.height(16.dp))
@@ -108,11 +111,11 @@ fun BookingUI(db: DatabaseReference, onBack: () -> Unit) {
 }
 
 @Composable
-fun StatusUI(trip: Trip, db: DatabaseReference) {
+fun BoxScope.StatusUI(trip: Trip, db: DatabaseReference) {
     Card(modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(16.dp)) {
         Column(modifier = Modifier.padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
             CircularProgressIndicator(color = Color(0xFF009688))
-            Text("Finding Driver...", fontWeight = FontWeight.Bold)
+            Text("Finding Driver...", fontWeight = FontWeight.Bold, modifier = Modifier.padding(top=12.dp))
             TextButton(onClick = { db.child(trip.tripId).removeValue() }) { Text("Cancel", color = Color.Red) }
         }
     }
