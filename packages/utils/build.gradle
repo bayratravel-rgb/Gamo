@@ -6,6 +6,6 @@ android {
     kotlinOptions { jvmTarget = '17' }
 }
 dependencies {
-    implementation project(':packages:shared-types') // THE MISSING BRIDGE
+    implementation project(':packages:shared-types')
     implementation 'androidx.core:core-ktx:1.12.0'
 }

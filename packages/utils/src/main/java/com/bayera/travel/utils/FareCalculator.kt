@@ -1,17 +1,16 @@
 package com.bayera.travel.utils
+import com.bayera.travel.common.models.VehicleType
+import kotlin.math.*
 
 object FareCalculator {
-    private const val BENZINE_PRICE = 300.0 // ETB per Liter
+    private const val BENZINE_PRICE = 300.0 
 
-    fun calculatePrice(distanceKm: Double, vehicleType: String): Double {
-        val baseFare = if (vehicleType == "CODE_3") 100.0 else 40.0
+    fun calculatePrice(distanceKm: Double, vehicleType: VehicleType): Double {
+        val baseFare = if (vehicleType == VehicleType.CODE_3) 100.0 else 40.0
+        val fuelConsumption = if (vehicleType == VehicleType.CODE_3) 10.0 else 25.0
+        val fuelCostPerKm = BENZINE_PRICE / fuelConsumption
         
-        // Estimated Fuel Consumption
-        // Code 3: ~10km per Liter -> 30 ETB/km fuel cost
-        // Bajaj: ~25km per Liter -> 12 ETB/km fuel cost
-        val fuelMultiplier = if (vehicleType == "CODE_3") (BENZINE_PRICE / 10) else (BENZINE_PRICE / 25)
-        
-        val total = baseFare + (distanceKm * fuelMultiplier * 1.5) // 1.5 multiplier for driver profit
-        return (Math.round(total / 5.0) * 5.0).toDouble() // Round to nearest 5 ETB
+        val total = baseFare + (distanceKm * fuelCostPerKm * 1.5)
+        return (Math.round(total / 5.0) * 5.0).toDouble()
     }
 }
