@@ -1,12 +1,12 @@
 package com.bayera.travel.customer
 
-import android.content.Context
-import android.os.Bundle
+import android.content.*
+import android.os.*
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.shape.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -19,12 +19,15 @@ import androidx.compose.ui.unit.*
 import androidx.navigation.NavController
 import androidx.navigation.compose.*
 import com.google.firebase.FirebaseApp
+import com.google.firebase.database.*
 import com.bayera.travel.common.models.*
 import com.bayera.travel.utils.FareCalculator
+import org.osmdroid.config.Configuration
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        Configuration.getInstance().userAgentValue = "BayeraApp"
         try { FirebaseApp.initializeApp(this) } catch (e: Exception) {}
         setContent {
             val nav = rememberNavController()
@@ -32,14 +35,30 @@ class MainActivity : ComponentActivity() {
             val start = if (prefs.getString("email", "").isNullOrEmpty()) "login" else "dash"
             MaterialTheme(colorScheme = darkColorScheme(background = Color(0xFF121212))) {
                 NavHost(navController = nav, startDestination = start) {
-                    composable("login") { Text("Login Placeholder") }
+                    composable("login") { CustomerLoginUI(nav) }
                     composable("dash") { DashboardUI(nav) }
-                    composable("summary/{vType}") { b ->
-                        val type = b.arguments?.getString("vType") ?: "BAJAJ"
-                        SummaryUI(nav, if(type == "CODE_3") VehicleType.CODE_3 else VehicleType.BAJAJ)
-                    }
                 }
             }
+        }
+    }
+}
+
+@Composable
+fun CustomerLoginUI(nav: NavController) {
+    val context = LocalContext.current
+    var name by remember { mutableStateOf("") }
+    var email by remember { mutableStateOf("") }
+    Column(modifier = Modifier.fillMaxSize().background(Color(0xFF1A1A1A)).padding(32.dp), verticalArrangement = Arrangement.Center) {
+        Text("Welcome to Bayera", color = Color.White, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+        Spacer(modifier = Modifier.height(32.dp))
+        OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("Name") }, modifier = Modifier.fillMaxWidth())
+        Spacer(modifier = Modifier.height(16.dp))
+        OutlinedTextField(value = email, onValueChange = { email = it }, label = { Text("Email") }, modifier = Modifier.fillMaxWidth())
+        Button(onClick = { if(name.isNotEmpty() && email.contains("@")) {
+            context.getSharedPreferences("user_prefs", Context.MODE_PRIVATE).edit().putString("name", name).putString("email", email).apply()
+            nav.navigate("dash")
+        }}, modifier = Modifier.fillMaxWidth().padding(top=32.dp).height(56.dp), colors = ButtonDefaults.buttonColors(containerColor = Color.White)) {
+            Text("Get Started", color = Color.Black, fontWeight = FontWeight.Bold)
         }
     }
 }
@@ -47,34 +66,22 @@ class MainActivity : ComponentActivity() {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DashboardUI(nav: NavController) {
+    val context = LocalContext.current
+    val name = context.getSharedPreferences("user_prefs", Context.MODE_PRIVATE).getString("name", "User")
     Column(modifier = Modifier.fillMaxSize().padding(24.dp)) {
-        Text("Bayera Travel", style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold, color = Color.White)
-        Spacer(modifier = Modifier.height(32.dp))
+        Text("Bayera Travel", style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.Bold, color = Color.White)
+        Text("Hi, $name!", color = Color.Gray)
+        Spacer(modifier = Modifier.height(40.dp))
         Row(modifier = Modifier.fillMaxWidth()) {
-            Card(onClick = { nav.navigate("summary/BAJAJ") }, modifier = Modifier.weight(1f).height(120.dp), colors = CardDefaults.cardColors(containerColor = Color(0xFFE8F5E9))) {
-                Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) { Text("Bajaj", fontWeight = FontWeight.Bold, color = Color.Black) }
+            Card(onClick = {}, modifier = Modifier.weight(1f).height(140.dp), colors = CardDefaults.cardColors(containerColor = Color(0xFFE3F2FD))) {
+                Column(modifier = Modifier.fillMaxSize(), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
+                    Icon(Icons.Default.DirectionsCar, null, tint = Color(0xFF1976D2)); Text("Ride", fontWeight = FontWeight.Bold, color = Color.Black)
+                }
             }
             Spacer(modifier = Modifier.width(16.dp))
-            Card(onClick = { nav.navigate("summary/CODE_3") }, modifier = Modifier.weight(1f).height(120.dp), colors = CardDefaults.cardColors(containerColor = Color(0xFFE3F2FD))) {
-                Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) { Text("Code 3", fontWeight = FontWeight.Bold, color = Color.Black) }
-            }
-        }
-    }
-}
-
-@Composable
-fun SummaryUI(nav: NavController, type: VehicleType) {
-    val price = FareCalculator.calculatePrice(5.0, type)
-    Box(modifier = Modifier.fillMaxSize().background(Color.White)) {
-        Card(modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(16.dp), shape = RoundedCornerShape(24.dp)) {
-            Column(modifier = Modifier.padding(24.dp)) {
-                Text("Trip Summary", fontWeight = FontWeight.Black, fontSize = 22.sp)
-                Text("Vehicle: ${type.name}", color = Color.Gray)
-                Spacer(modifier = Modifier.height(16.dp))
-                Text("$price ETB", style = MaterialTheme.typography.displaySmall, color = Color(0xFF2E7D32), fontWeight = FontWeight.Bold)
-                Text("Price adjusted for 300 ETB/L Benzine", fontSize = 10.sp, color = Color.Gray)
-                Button(onClick = {}, modifier = Modifier.fillMaxWidth().padding(top=16.dp).height(56.dp), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFFD600))) {
-                    Text("BOOK RIDE", color = Color.Black, fontWeight = FontWeight.Bold)
+            Card(onClick = {}, modifier = Modifier.weight(1f).height(140.dp), colors = CardDefaults.cardColors(containerColor = Color(0xFFF3E5F5))) {
+                Column(modifier = Modifier.fillMaxSize(), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
+                    Icon(Icons.Default.Hotel, null, tint = Color(0xFF6A1B9A)); Text("Hotels", fontWeight = FontWeight.Bold, color = Color.Black)
                 }
             }
         }
