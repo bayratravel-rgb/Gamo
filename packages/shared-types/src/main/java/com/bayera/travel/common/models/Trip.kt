@@ -2,7 +2,7 @@ package com.bayera.travel.common.models
 enum class VehicleType { BAJAJ, CODE_3 }
 data class Trip(
     val tripId: String = "",
-    val customerEmail: String = "",
+    val customerPhone: String = "",
     val customerName: String = "",
     val driverName: String? = null,
     val vehicleType: VehicleType = VehicleType.BAJAJ,
