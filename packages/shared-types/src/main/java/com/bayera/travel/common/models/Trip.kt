@@ -3,6 +3,7 @@ enum class VehicleType { BAJAJ, CODE_3 }
 data class Trip(
     val tripId: String = "",
     val customerPhone: String = "",
+    val customerEmail: String = "",
     val customerName: String = "",
     val driverName: String? = null,
     val vehicleType: VehicleType = VehicleType.BAJAJ,
