@@ -4,9 +4,9 @@ data class Trip(
     val customerEmail: String = "",
     val customerName: String = "",
     val driverName: String? = null,
-    val vehicleType: String = "COMFORT",
+    val vehicleType: String = "BAJAJ", // BAJAJ or CODE_3
     val status: TripStatus = TripStatus.REQUESTED,
-    val price: Double = 110.0,
+    val price: Double = 0.0,
     val pickupLocation: Location = Location(),
     val dropoffLocation: Location = Location(),
     val notes: String = ""
