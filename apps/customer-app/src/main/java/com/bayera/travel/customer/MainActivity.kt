@@ -6,7 +6,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.*
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -37,7 +37,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         
-        // --- 🛡️ CRASH PROTECTOR (SAFETY NET) ---
+        // 🛡️ CRASH PROTECTOR
         Thread.setDefaultUncaughtExceptionHandler { _, e ->
             val sw = StringWriter(); e.printStackTrace(PrintWriter(sw))
             val intent = Intent(this, MainActivity::class.java).apply {
@@ -47,10 +47,9 @@ class MainActivity : ComponentActivity() {
         }
 
         if (intent.getStringExtra("fatal_log") != null) {
-            setContent { ErrorScreenUI(intent.getStringExtra("fatal_log")!!) }; return
+            setContent { ErrorUI(intent.getStringExtra("fatal_log")!!) }; return
         }
 
-        // --- 🔑 MANUAL FIREBASE INIT ---
         try {
             if (FirebaseApp.getApps(this).isEmpty()) {
                 val opt = FirebaseOptions.Builder()
@@ -74,14 +73,14 @@ fun CustomerSuperApp() {
     val start = if (prefs.getString("email", "").isNullOrEmpty()) "login" else "dash"
     
     NavHost(navController = nav, startDestination = start) {
-        composable("login") { LoginScreenUI(nav) }
-        composable("dash") { DashboardUI(nav) }
-        composable("ride_map") { RideMapBookingUI(nav) }
+        composable("login") { LoginUI(nav) }
+        composable("dash") { DashUI(nav) }
+        composable("ride_flow") { RideFlowUI(nav) }
     }
 }
 
 @Composable
-fun LoginScreenUI(nav: NavController) {
+fun LoginUI(nav: NavController) {
     val prefs = LocalContext.current.getSharedPreferences("user_prefs", Context.MODE_PRIVATE)
     var name by remember { mutableStateOf("") }
     var email by remember { mutableStateOf("") }
@@ -100,19 +99,20 @@ fun LoginScreenUI(nav: NavController) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun DashboardUI(nav: NavController) {
+fun DashUI(nav: NavController) {
     val name = LocalContext.current.getSharedPreferences("user_prefs", Context.MODE_PRIVATE).getString("name", "User")
     Column(modifier = Modifier.fillMaxSize().background(Color.White).padding(20.dp)) {
         Text("Bayera Travel", style = MaterialTheme.typography.displayMedium, fontWeight = FontWeight.ExtraBold)
         Text("Hi, $name!", style = MaterialTheme.typography.titleLarge, color = Color.Gray)
         Spacer(modifier = Modifier.height(32.dp))
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-            Card(onClick = { nav.navigate("ride_map") }, modifier = Modifier.weight(1f).height(140.dp), colors = CardDefaults.cardColors(containerColor = Color(0xFFE3F2FD))) {
+        Row(modifier = Modifier.fillMaxWidth()) {
+            Card(onClick = { nav.navigate("ride_flow") }, modifier = Modifier.weight(1f).height(140.dp), colors = CardDefaults.cardColors(containerColor = Color(0xFFE3F2FD))) {
                 Column(modifier = Modifier.fillMaxSize(), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
                     Icon(Icons.Default.DirectionsCar, null, tint = Color(0xFF1976D2), modifier = Modifier.size(40.dp))
                     Text("Ride", fontWeight = FontWeight.Bold)
                 }
             }
+            Spacer(modifier = Modifier.width(16.dp))
             Card(onClick = {}, modifier = Modifier.weight(1f).height(140.dp), colors = CardDefaults.cardColors(containerColor = Color(0xFFF3E5F5))) {
                 Column(modifier = Modifier.fillMaxSize(), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
                     Icon(Icons.Default.Hotel, null, tint = Color(0xFF6A1B9A), modifier = Modifier.size(40.dp))
@@ -124,8 +124,8 @@ fun DashboardUI(nav: NavController) {
 }
 
 @Composable
-fun RideMapBookingUI(nav: NavController) {
-    var mode by remember { mutableStateOf("PICKUP") } // PICKUP, DEST, SUMMARY
+fun RideFlowUI(nav: NavController) {
+    var mode by remember { mutableStateOf("PICKUP") }
     var pickupLoc by remember { mutableStateOf(GeoPoint(6.02, 37.55)) }
     var destLoc by remember { mutableStateOf(GeoPoint(6.02, 37.55)) }
     
@@ -174,9 +174,9 @@ fun RideMapBookingUI(nav: NavController) {
 }
 
 @Composable
-fun ErrorScreenUI(log: String) {
+fun ErrorUI(log: String) {
     Column(modifier = Modifier.fillMaxSize().background(Color.Black).verticalScroll(rememberScrollState()).padding(16.dp)) {
-        Text("⚠️ SYSTEM CRASH LOG", color = Color.Red, fontWeight = FontWeight.Bold)
+        Text("⚠️ SYSTEM ERROR", color = Color.Red, fontWeight = FontWeight.Bold)
         Text(log, color = Color.Yellow, style = MaterialTheme.typography.bodySmall)
     }
 }
